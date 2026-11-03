@@ -12,4 +12,11 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
     <ProjectReference Include="../IDMRea.Contracts/IDMRea.Contracts.csproj" />
   </ItemGroup>
+  <Target Name="CopyApplicationXamlAfterPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <ApplicationXbf Include="$(TargetDir)**/*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="$(ProjectPriFullPath)" DestinationFiles="$(PublishDir)resources.pri" />
+    <Copy SourceFiles="@(ApplicationXbf)" DestinationFiles="@(ApplicationXbf->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>
