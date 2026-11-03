@@ -69,7 +69,7 @@ $server = Start-Process python -ArgumentList (Join-Path $PSScriptRoot 'fixture-s
 $app = $null
 try {
  $app = Start-Process (Join-Path $root 'artifacts/windows/IDMRea.App.exe') -PassThru
- Wait-For { $app.Refresh(); $app.MainWindowHandle -ne 0 } 'the WinUI window'
+ Wait-For { $app.Refresh(); if ($app.HasExited) { throw "WinUI process exited with code $($app.ExitCode)" }; $app.MainWindowHandle -ne 0 } 'the WinUI window'
  $element = [System.Windows.Automation.AutomationElement]::FromHandle($app.MainWindowHandle)
  $folderField = $element.FindFirst([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'Save to'))
  $folderField.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($folder)
@@ -97,6 +97,14 @@ try {
  (Send-Engine @{command='list'}) | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $captures 'runtime-verification.json')
  Send-Engine @{command='shutdown'} | Out-Null
  'Real WinUI captures using controlled localhost fixtures.' | Set-Content (Join-Path $captures 'README.txt')
+} catch {
+ $failure = $_
+ "Interactive=$([Environment]::UserInteractive); capture session=$([Diagnostics.Process]::GetCurrentProcess().SessionId)" | Tee-Object -FilePath (Join-Path $captures 'diagnostics.txt')
+ if ($app) { $app.Refresh(); "App exited=$($app.HasExited); session=$($app.SessionId); window=$($app.MainWindowHandle)" | Tee-Object -FilePath (Join-Path $captures 'diagnostics.txt') -Append }
+ $startup = Join-Path $env:IDMREA_DATA_DIRECTORY 'app-startup.log'
+ if (Test-Path $startup) { Get-Content $startup; Copy-Item $startup $captures }
+ Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -in '.NET Runtime','Application Error','Windows Error Reporting' } | Select-Object TimeCreated,ProviderName,Message | Format-List | Out-String | Tee-Object -FilePath (Join-Path $captures 'events.txt')
+ throw $failure
 } finally {
  if ($app -and !$app.HasExited) { Stop-Process -Id $app.Id -Force }
  if (!$server.HasExited) { Stop-Process -Id $server.Id -Force }
