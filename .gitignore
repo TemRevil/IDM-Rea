@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+artifacts/
+.artifacts/
+TestResults/
+.vs/
+*.user
+*.db*
+*.exe
+*.dll
+*.sys
+*.crx
+*.xpi
+node_modules/
+__pycache__/
