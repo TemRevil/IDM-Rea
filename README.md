@@ -12,4 +12,8 @@ Open `IDMRea.slnx` on Windows with the .NET 10 SDK and WinUI tooling. Cross-plat
 
 See [architecture](docs/architecture.md), [research provenance](docs/investigation.md), and [verification status](docs/verification.md). The Windows workflow attempts actual app runtime capture after publishing; captures and binaries are Actions artifacts, not committed source.
 
+The original workspace later recovered. [The comparison and fixes](docs/workspace-review.md)
+retain the reconstruction's Windows/IPC improvements and restore missing transfer
+and UI behavior. Original research artifacts remain local.
+
 Windows build and runtime smoke verification passed: [Actions run 41635371485](https://github.com/TemRevil/IDM-Rea/actions/runs/41635371485). Download `IDM-Rea-windows-x64` for the unsigned app folder and `IDM-Rea-runtime-screenshots` for actual WinUI captures using controlled local test downloads. All 21 engine/integration tests passed on Windows and Linux.

@@ -7,3 +7,5 @@ The earlier session investigated Internet Download Manager 6.43 Build 17 for arc
 Those observations support integration and resume design hypotheses. They do not recover proprietary source, scheduling, segment counts, thread models or algorithms. The historical JavaScript semantic analysis failed; no native decompiler provider was configured, and no Windows runtime observation or benchmark was performed. The installer was not executed and Authenticode trust was not independently verified.
 
 This reconstruction contains only independently written source. It does not include the installer, extracted binaries, bundled extension source, or invented raw REA evidence. The extractor is not recreated because the handoff does not contain enough byte-level format details to verify an equivalent implementation safely.
+
+Recovery update: the original workspace subsequently became accessible. Its actual REA evidence and extraction script are preserved locally. They have not been uploaded as part of this application review.

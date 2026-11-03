@@ -24,6 +24,7 @@ public sealed class EngineClient
         if (!File.Exists(path)) throw new FileNotFoundException("Publish the engine into the application engine folder.", path);
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true });
         using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        await SendAsync(new("list"), startup.Token);
+        var response = await SendAsync(new("list"), startup.Token);
+        if (!response.Ok) throw new IOException(response.Error ?? "The engine could not initialize.");
     }
 }

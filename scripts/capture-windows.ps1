@@ -63,7 +63,24 @@ function Add-ThroughUI($app,$url) {
  $urlField = $element.FindFirst($scope,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'Download URL'))
  $urlField.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($url)
  $button = $element.FindFirst($scope,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'Start download'))
+ Wait-For { $button.Current.IsEnabled } 'the ready Start download button'
  $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+}
+function Test-RowControls($app,$filename,$pause,$resume,$cancel) {
+ $element = [System.Windows.Automation.AutomationElement]::FromHandle($app.MainWindowHandle)
+ $scope = [System.Windows.Automation.TreeScope]::Descendants
+ $row = $element.FindFirst($scope,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$filename))
+ if (!$row) { return $false }
+ while ($row -and $row.Current.ControlType -ne [System.Windows.Automation.ControlType]::ListItem) {
+  $row = [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($row)
+ }
+ if (!$row) { return $false }
+ $expected = @{Pause=$pause;Resume=$resume;Cancel=$cancel}
+ foreach ($name in $expected.Keys) {
+  $button = $row.FindFirst($scope,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$name))
+  if (!$button -or $button.Current.IsEnabled -ne $expected[$name]) { return $false }
+ }
+ return $true
 }
 $server = Start-Process python -ArgumentList (Join-Path $PSScriptRoot 'fixture-server.py') -PassThru
 $app = $null
@@ -76,6 +93,7 @@ try {
  Capture $app '01-empty-queue.png'
  Add-ThroughUI $app 'http://127.0.0.1:18764/complete.bin'
  Wait-For { (Send-Engine @{command='list'}).jobs.status -contains 'Completed' } 'completed fixture'
+ Wait-For { Test-RowControls $app 'complete.bin' $false $false $false } 'completed row controls'
  Add-ThroughUI $app 'http://127.0.0.1:18764/paused.bin'
  Wait-For { (Send-Engine @{command='list'}).jobs.status -contains 'Downloading' } 'active transfer'
  $paused = (Send-Engine @{command='list'}).jobs | Where-Object status -eq 'Downloading' | Select-Object -First 1
@@ -84,6 +102,8 @@ try {
  Send-Engine @{command='pause'; id=$paused.id} | Out-Null
  Add-ThroughUI $app 'http://127.0.0.1:18764/active.bin'
  Wait-For { (Send-Engine @{command='list'}).jobs.status -contains 'Downloading' } 'second active transfer'
+ Wait-For { Test-RowControls $app 'paused.bin' $false $true $true } 'paused row controls'
+ Wait-For { Test-RowControls $app 'active.bin' $true $false $true } 'active row controls'
  Capture $app '02-test-downloads.png'
  # Closing and reopening the actual UI must preserve engine ownership and jobs.
  [void]$app.CloseMainWindow(); $app.WaitForExit(10000) | Out-Null

@@ -27,20 +27,20 @@ public sealed class DownloadTests
         Assert.Equal(server.Body, await File.ReadAllBytesAsync(done.Destination)); Assert.Equal("existing", await File.ReadAllTextAsync(Path.Combine(dir, "file.bin")));
     }
     [Theory]
-    [InlineData("range")][InlineData("ignore")][InlineData("change-full")][InlineData("bad-range")][InlineData("bad-validator")][InlineData("no-validator")][InlineData("extra-tail")][InlineData("last-modified")][InlineData("short-part")][InlineData("complete-checkpoint")]
+    [InlineData("range")][InlineData("ignore")][InlineData("change-full")][InlineData("bad-range")][InlineData("bad-validator")][InlineData("no-validator")][InlineData("extra-tail")][InlineData("last-modified")][InlineData("short-part")][InlineData("complete-checkpoint")][InlineData("oversized-checkpoint")]
     public async Task ResumeChecksRepresentationAndCheckpoint(string mode)
     {
         await using var server = new Fixture { Mode = mode }; var dir = Temp(); var data = Path.Combine(dir, "data");
         var destination = Path.Combine(dir, "file.bin"); var part = destination + ".part"; const int checkpoint = 65536;
         var bytes = mode == "change-full" ? RandomNumberGenerator.GetBytes(checkpoint) : server.Body[..(mode == "extra-tail" ? checkpoint + 100 : mode == "short-part" ? checkpoint / 2 : checkpoint)];
         await File.WriteAllBytesAsync(part, bytes);
-        var job = new DownloadJob(Guid.NewGuid(), server.Url, destination, part, DownloadStatus.Paused, checkpoint, mode == "complete-checkpoint" ? checkpoint : server.Body.Length, mode is "no-validator" or "last-modified" ? null : "\"v1\"", mode == "last-modified" ? DateTimeOffset.Parse("2026-01-01T00:00:00Z") : null);
+        var job = new DownloadJob(Guid.NewGuid(), server.Url, destination, part, DownloadStatus.Paused, checkpoint, mode == "complete-checkpoint" ? checkpoint : mode == "oversized-checkpoint" ? checkpoint - 1 : server.Body.Length, mode is "no-validator" or "last-modified" ? null : "\"v1\"", mode == "last-modified" ? DateTimeOffset.Parse("2026-01-01T00:00:00Z") : null);
         new JobStore(data).Save(job);
         await using var manager = new DownloadManager(data); await manager.ControlAsync(job.Id, resume: true);
         var done = await Wait(manager, job.Id, DownloadStatus.Completed, DownloadStatus.Failed);
         if (mode.StartsWith("bad")) { Assert.Equal(DownloadStatus.Failed, done.Status); Assert.False(File.Exists(destination)); }
         else { Assert.Equal(DownloadStatus.Completed, done.Status); Assert.Equal(server.Body, await File.ReadAllBytesAsync(destination)); }
-        Assert.Equal(mode is "no-validator" or "complete-checkpoint" ? null : mode == "short-part" ? "bytes=32768-" : "bytes=65536-", server.LastRange);
+        Assert.Equal(mode is "no-validator" or "complete-checkpoint" or "oversized-checkpoint" ? null : mode == "short-part" ? "bytes=32768-" : "bytes=65536-", server.LastRange);
     }
     [Fact]
     public async Task PauseRestartResumeAndCancel()
@@ -117,6 +117,8 @@ internal sealed class Fixture : IAsyncDisposable
     public string Mode { get; init; } = "range";
     public int Delay { get; init; }
     public string? LastRange { get; private set; }
+    private int requestCount;
+    public int RequestCount => Volatile.Read(ref requestCount);
     public string Url => $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/file.bin";
     public Fixture() { listener.Start(); loop = Accept(); }
     private async Task Accept()
@@ -132,15 +134,17 @@ internal sealed class Fixture : IAsyncDisposable
             var stream = client.GetStream(); using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, true);
             await reader.ReadLineAsync(stop.Token); string? line; string? range = null;
             while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync(stop.Token))) if (line.StartsWith("Range:", StringComparison.OrdinalIgnoreCase)) range = line[6..].Trim();
+            Interlocked.Increment(ref requestCount);
             LastRange = range; var offset = range == null ? 0 : int.Parse(range.Split('=')[1].TrimEnd('-'));
             var partial = range != null && Mode is not ("ignore" or "change-full"); if (!partial) offset = 0;
-            var header = $"HTTP/1.1 {(partial ? "206 Partial Content" : "200 OK")}\r\nContent-Length: {Body.Length - offset}\r\nConnection: close\r\n";
+            var header = $"HTTP/1.1 {(partial ? "206 Partial Content" : "200 OK")}\r\nConnection: close\r\n";
+            if (Mode is not ("unknown-length" or "overrun-range")) header += $"Content-Length: {Body.Length - offset}\r\n";
             if (Mode == "last-modified") header += "Last-Modified: Thu, 01 Jan 2026 00:00:00 GMT\r\n";
             if (Mode is not ("no-validator" or "last-modified")) header += $"ETag: {(Mode is "bad-validator" or "change-full" ? "\"v2\"" : "\"v1\"")}\r\n";
             if (partial) header += $"Content-Range: bytes {(Mode == "bad-range" ? offset + 1 : offset)}-{Body.Length - 1}/{Body.Length}\r\n";
             await stream.WriteAsync(Encoding.ASCII.GetBytes(header + "\r\n"), stop.Token);
-            var end = Mode == "truncate" ? Body.Length / 2 : Body.Length;
-            for (var i = offset; i < end; i += 8192) { await stream.WriteAsync(Body.AsMemory(i, Math.Min(8192, end - i)), stop.Token); if (Delay > 0) await Task.Delay(Delay, stop.Token); }
+            var end = Mode == "truncate" ? Body.Length / 2 : Mode == "overrun-range" ? Body.Length * 2 : Body.Length;
+            for (var i = offset; i < end; i += 8192) { await stream.WriteAsync(Body.AsMemory(i % Body.Length, Math.Min(8192, end - i)), stop.Token); if (Delay > 0) await Task.Delay(Delay, stop.Token); }
         }
         catch (Exception ex) when (ex is IOException or OperationCanceledException or SocketException) { }
     }

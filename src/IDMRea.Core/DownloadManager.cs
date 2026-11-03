@@ -63,10 +63,19 @@ public sealed class DownloadManager : IAsyncDisposable
         try
         {
             var job = Get(id);
+            // Resume is idempotent for queued/active/terminal jobs. In particular,
+            // a repeated UI or IPC command must not cancel a running transfer.
+            if (resume)
+            {
+                if (job.Status is not (DownloadStatus.Paused or DownloadStatus.Failed)) return;
+                if (File.Exists(job.Destination) || Directory.Exists(job.Destination))
+                    throw new IOException("The destination already exists. Move it before resuming.");
+            }
+            else if (!cancel && job.Status is not (DownloadStatus.Queued or DownloadStatus.Downloading)) return;
             if (workers.Remove(id, out var worker)) { worker.Cancel.Cancel(); await worker.Task; worker.Cancel.Dispose(); }
             job = Get(id);
             if (job.Status == DownloadStatus.Completed) return;
-            if (cancel) { File.Delete(job.PartialPath); Save(job with { Status = DownloadStatus.Cancelled }); }
+            if (cancel) { File.Delete(job.PartialPath); Save(job with { Status = DownloadStatus.Cancelled, ReceivedBytes = 0, Error = null }); }
             else if (resume) { if (job.Status != DownloadStatus.Cancelled) Start(id); }
             else if (job.Status != DownloadStatus.Cancelled) Save(job with { Status = DownloadStatus.Paused });
         }
@@ -82,7 +91,7 @@ public sealed class DownloadManager : IAsyncDisposable
             job = Get(id) with { Status = DownloadStatus.Downloading }; Save(job);
             var size = File.Exists(job.PartialPath) ? new FileInfo(job.PartialPath).Length : 0;
             var offset = Math.Min(size, job.ReceivedBytes);
-            if ((!Strong(job.ETag) && job.LastModified == null) || job.TotalBytes == offset) offset = 0;
+            if ((!Strong(job.ETag) && job.LastModified == null) || job.TotalBytes is long knownSize && offset >= knownSize) offset = 0;
             using var file = new FileStream(job.PartialPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 65536, true);
             file.SetLength(offset); file.Position = offset;
             using var request = new HttpRequestMessage(HttpMethod.Get, job.Url);
@@ -117,6 +126,8 @@ public sealed class DownloadManager : IAsyncDisposable
                 {
                     using var idle = CancellationTokenSource.CreateLinkedTokenSource(token); idle.CancelAfter(TimeSpan.FromSeconds(60));
                     var read = await body.ReadAsync(buffer, idle.Token); if (read == 0) break;
+                    if (job.TotalBytes is long declared && read > declared - job.ReceivedBytes)
+                        throw new IOException("The server sent more bytes than the declared representation.");
                     await file.WriteAsync(buffer.AsMemory(0, read), token); job = job with { ReceivedBytes = job.ReceivedBytes + read };
                     if (DateTime.UtcNow - checkpoint > TimeSpan.FromMilliseconds(500)) { file.Flush(true); Save(job); checkpoint = DateTime.UtcNow; }
                 }
@@ -124,7 +135,7 @@ public sealed class DownloadManager : IAsyncDisposable
             finally { file.Flush(true); Save(job); }
             if (job.TotalBytes is long expected && expected != job.ReceivedBytes) throw new IOException("The response ended before the expected size.");
             file.Close();
-            await using (var input = File.OpenRead(job.PartialPath)) job = job with { CompletionSha256 = Convert.ToHexString(await SHA256.HashDataAsync(input, token)), Status = DownloadStatus.Finalizing };
+            await using (var input = File.OpenRead(job.PartialPath)) job = job with { CompletionSha256 = Convert.ToHexString(await SHA256.HashDataAsync(input, token)), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing };
             Save(job); File.Move(job.PartialPath, job.Destination, false); Save(job with { Status = DownloadStatus.Completed });
         }
         catch (Exception ex)
@@ -145,10 +156,10 @@ public sealed class DownloadManager : IAsyncDisposable
         }
         try
         {
-            if (Matches(job.Destination)) return job with { Status = DownloadStatus.Completed, Error = null };
+            if (Matches(job.Destination)) return job with { Status = DownloadStatus.Completed, TotalBytes = job.ReceivedBytes, Error = null };
             if (File.Exists(job.Destination)) throw new IOException("Destination is occupied; existing file preserved.");
             if (!Matches(job.PartialPath)) throw new IOException("Publication checkpoint does not match the partial file.");
-            File.Move(job.PartialPath, job.Destination, false); return job with { Status = DownloadStatus.Completed, Error = null };
+            File.Move(job.PartialPath, job.Destination, false); return job with { Status = DownloadStatus.Completed, TotalBytes = job.ReceivedBytes, Error = null };
         }
         catch (Exception ex) { return job with { Status = DownloadStatus.Failed, Error = ex.Message }; }
     }
