@@ -45,6 +45,8 @@ restarts safely instead of sending an invalid range. Full local suite: 29 tests.
   newer snapshots.
 - Shutdown disables the UI only after acknowledgement; errors leave it usable.
 - File count and background-transfer/engine status are visible again.
+- The Open downloads action returns to the header and spacing is compacted so
+  the default window can show the three mixed-state fixture rows together.
 
 The existing Windows runtime capture now also checks enabled button states on
 completed, paused and active rows. Windows results must be checked on the pushed
