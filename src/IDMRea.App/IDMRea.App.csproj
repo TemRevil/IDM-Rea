@@ -12,12 +12,4 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
     <ProjectReference Include="../IDMRea.Contracts/IDMRea.Contracts.csproj" />
   </ItemGroup>
-  <Target Name="IncludeWinUIResourcesInPublish" AfterTargets="ComputeFilesToPublish">
-    <ItemGroup>
-      <ResolvedFileToPublish Include="$(TargetDir)**/*.pri;$(TargetDir)**/*.xbf" Exclude="@(ResolvedFileToPublish)">
-        <RelativePath>%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      </ResolvedFileToPublish>
-    </ItemGroup>
-  </Target>
 </Project>
