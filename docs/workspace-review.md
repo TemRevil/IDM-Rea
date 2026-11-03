@@ -49,8 +49,12 @@ restarts safely instead of sending an invalid range. Full local suite: 29 tests.
   the default window can show the three mixed-state fixture rows together.
 
 The existing Windows runtime capture now also checks enabled button states on
-completed, paused and active rows. Windows results must be checked on the pushed
-commit; earlier successful Windows runs do not validate these UI edits.
+completed, paused and active rows. The reviewed application at commit
+`2536367cc47ec2e136fe8e18658885cc05e68747` passed Windows publishing,
+all 29 tests on both Linux and Windows, and the actual WinUI runtime/capture checks
+in [run 41638803847](https://github.com/TemRevil/IDM-Rea/actions/runs/41638803847).
+The final PNGs were downloaded and visually checked; all three mixed-state rows
+are visible at the default window size.
 
 ## Recovered research
 

@@ -16,4 +16,4 @@ The original workspace later recovered. [The comparison and fixes](docs/workspac
 retain the reconstruction's Windows/IPC improvements and restore missing transfer
 and UI behavior. Original research artifacts remain local.
 
-Windows build and runtime smoke verification passed: [Actions run 41635371485](https://github.com/TemRevil/IDM-Rea/actions/runs/41635371485). Download `IDM-Rea-windows-x64` for the unsigned app folder and `IDM-Rea-runtime-screenshots` for actual WinUI captures using controlled local test downloads. All 21 engine/integration tests passed on Windows and Linux.
+The reviewed version passed [Actions run 41638803847](https://github.com/TemRevil/IDM-Rea/actions/runs/41638803847): all **29 engine/integration tests** passed on Windows and Linux, and the actual WinUI runtime checks passed. Download `IDM-Rea-windows-x64` for the unsigned app folder and `IDM-Rea-runtime-screenshots` for real captures using controlled local test downloads. The captures were downloaded and visually checked; the completed, paused and active rows fit together at the default window size.

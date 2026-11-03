@@ -1,4 +1,27 @@
-# Reconstruction verification — 2026-11-03
+# Verification history — 2026-11-03
+
+## Current reviewed version
+
+The original workspace recovered and was compared against the reconstructed
+remote source. Confirmed transfer/control regressions and missing UI behavior
+were fixed while retaining the Windows publishing and IPC improvements.
+[Review details](workspace-review.md).
+
+Application commit `2536367cc47ec2e136fe8e18658885cc05e68747` passed
+[run 41638803847](https://github.com/TemRevil/IDM-Rea/actions/runs/41638803847):
+29 tests on Linux, 29 tests on Windows, self-contained Windows publishing, and
+actual WinUI runtime/capture verification. The runtime script additionally
+checks enabled button states on completed, paused and active rows. The PNGs
+were downloaded through the GitHub connector and visually inspected.
+The active transfer remains visible alongside the completed and paused rows
+at the default window size.
+
+Artifacts: `IDM-Rea-windows-x64` and `IDM-Rea-runtime-screenshots`
+(screenshot artifact ID `13231818308`). They contain unsigned outputs and
+controlled local test downloads. No proprietary-target research files were
+added to the repository.
+
+## Original reconstruction history
 
 The previous source tree, installed toolchain and saved CLI login were absent from the newly started workspace. This repository was reconstructed from the user handoff; previous test results do not validate it.
 
