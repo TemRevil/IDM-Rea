@@ -12,7 +12,14 @@ public partial class App : Application
     public App()
     {
         Log($"Application constructed; interactive={Environment.UserInteractive}; session={System.Diagnostics.Process.GetCurrentProcess().SessionId}");
-        UnhandledException += (_, e) => Log(e.Exception.ToString());
+        UnhandledException += (_, e) =>
+        {
+            Log($"Unhandled message: {e.Message}; HRESULT={e.Exception.HResult:X8}");
+            Log(e.Exception.ToString());
+            foreach (System.Collections.DictionaryEntry item in e.Exception.Data) Log($"Exception data {item.Key}: {item.Value}");
+        };
+        DebugSettings.IsXamlResourceReferenceTracingEnabled = true;
+        DebugSettings.XamlResourceReferenceFailed += (_, e) => Log($"XAML resource: {e.Message}");
         InitializeComponent();
     }
     protected override void OnLaunched(LaunchActivatedEventArgs args)
