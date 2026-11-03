@@ -31,7 +31,7 @@ public sealed class DownloadManager : IAsyncDisposable
     {
         name = new string(name.Select(c => c < 32 || "<>:\"/\\|?*".Contains(c) ? '_' : c).ToArray()).Trim().TrimEnd('.');
         if (string.IsNullOrWhiteSpace(name)) name = "download";
-        var stem = name.Split('.')[0].ToUpperInvariant();
+        var stem = name.Split('.')[0].TrimEnd(' ').ToUpperInvariant();
         if (new[] { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" }.Contains(stem)) name = "_" + name;
         return name.Length > 180 ? name[..180] : name;
     }

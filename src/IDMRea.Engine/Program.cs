@@ -12,12 +12,19 @@ using var owned = ownership;
 await using var manager = new DownloadManager(Protocol.DataDirectory);
 using var stopped = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; stopped.Cancel(); };
+NamedPipeServerStream CreatePipe() => new(Protocol.PipeName, PipeDirection.InOut, 2, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+var pending = CreatePipe();
+try
+{
 while (!stopped.IsCancellationRequested)
 {
-    using var pipe = new NamedPipeServerStream(Protocol.PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+    using var pipe = pending;
     try
     {
         await pipe.WaitForConnectionAsync(stopped.Token);
+        // Keep a listening instance alive before replying, so rapid client reconnects
+        // cannot attach to a listener that is about to be removed.
+        pending = CreatePipe();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token); timeout.CancelAfter(TimeSpan.FromSeconds(15));
         using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true);
         using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
@@ -45,4 +52,6 @@ while (!stopped.IsCancellationRequested)
     }
     catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
 }
+}
+finally { pending.Dispose(); }
 return 0;

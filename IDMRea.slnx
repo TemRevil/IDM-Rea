@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/IDMRea.App/IDMRea.App.csproj" />
+    <Project Path="src/IDMRea.Contracts/IDMRea.Contracts.csproj" />
+    <Project Path="src/IDMRea.Core/IDMRea.Core.csproj" />
+    <Project Path="src/IDMRea.Engine/IDMRea.Engine.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/IDMRea.Core.Tests/IDMRea.Core.Tests.csproj" />
+  </Folder>
+</Solution>

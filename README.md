@@ -7,3 +7,7 @@ The design uses a separate background engine, SQLite checkpoints, validated HTTP
 Windows build: `pwsh scripts/publish-windows.ps1`. Run `artifacts/windows/IDMRea.App.exe` and keep the output folder together. The app targets Windows x64. Closing the window leaves transfers running; use the stop-engine command for a graceful shutdown.
 
 No signed installer, browser integration, segmented transfers, tray icon, or automatic startup is implemented.
+
+Open `IDMRea.slnx` on Windows with the .NET 10 SDK and WinUI tooling. Cross-platform engine tests: `dotnet test tests/IDMRea.Core.Tests -c Release`.
+
+See [architecture](docs/architecture.md), [research provenance](docs/investigation.md), and [verification status](docs/verification.md). The Windows workflow attempts actual app runtime capture after publishing; captures and binaries are Actions artifacts, not committed source.

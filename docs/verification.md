@@ -1,0 +1,11 @@
+# Reconstruction verification — 2026-11-03
+
+The previous source tree, installed toolchain and saved CLI login were absent from the newly started workspace. This repository was reconstructed from the user handoff; previous test results do not validate it.
+
+Local toolchain: Linux x64, .NET SDK 10.0.403. Engine build passed with zero warnings/errors. Final fresh suite: 21 passed, 0 failed, 0 skipped, including the real C# client/process test. Fresh tests exercise exact bytes and existing-file preservation, pause/restart/resume, ignored ranges, full replacement, incorrect ranges, changed validators, missing validators, extra uncheckpointed bytes, short partial files, complete checkpoints lacking publication identity, Last-Modified fallback, truncated bodies/cancel cleanup, Windows filenames, publication recovery on both sides of move, unrelated destinations, and actual C# EngineClient/process protocol and persistence. The IPC test exposed a reconnect race that was fixed by retaining a pending server instance while replying.
+
+WinUI packages restored, but Linux cannot execute Microsoft's Windows XAML compiler (`Exec format error`). That does not establish Windows compilation success. Windows CI and real desktop captures remain pending repository push. No running-application screenshots are claimed.
+
+`scripts/publish-windows.ps1` tests and publishes a self-contained x64 application and engine. The workflow uploads that folder before attempting runtime capture. `scripts/capture-windows.ps1` launches the actual WinUI executable, uses UI Automation to submit controlled localhost test links, captures empty/mixed queues via PrintWindow, exercises pause/resume/cancel, closes/reopens the UI, and checks transfers continue while the UI is closed. It rejects missing windows and blank captures. Its first Windows run is still required; runner desktop availability is not presumed. Engine restart recovery is covered separately by the actual-client process test.
+
+GitHub metadata and branches were checked: repository was empty. An actual connector contents write returned HTTP 403 `Resource not accessible by integration`; no remote checkpoint was created by that attempt. CLI device authorization was started because the inherited token failed authentication. Remote source backup and Windows CI require successful write authorization.
