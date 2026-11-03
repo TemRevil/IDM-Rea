@@ -100,7 +100,7 @@ try {
 } catch {
  $failure = $_
  "Interactive=$([Environment]::UserInteractive); capture session=$([Diagnostics.Process]::GetCurrentProcess().SessionId)" | Tee-Object -FilePath (Join-Path $captures 'diagnostics.txt')
- if ($app) { $app.Refresh(); "App exited=$($app.HasExited); session=$($app.SessionId); window=$($app.MainWindowHandle)" | Tee-Object -FilePath (Join-Path $captures 'diagnostics.txt') -Append }
+ if ($app) { $app.Refresh(); $state = if ($app.HasExited) { "App exited with code $($app.ExitCode)" } else { "App session=$($app.SessionId); window=$($app.MainWindowHandle)" }; $state | Tee-Object -FilePath (Join-Path $captures 'diagnostics.txt') -Append }
  $startup = Join-Path $env:IDMREA_DATA_DIRECTORY 'app-startup.log'
  if (Test-Path $startup) { Get-Content $startup; Copy-Item $startup $captures }
  Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -in '.NET Runtime','Application Error','Windows Error Reporting' } | Select-Object TimeCreated,ProviderName,Message | Format-List | Out-String | Tee-Object -FilePath (Join-Path $captures 'events.txt')
