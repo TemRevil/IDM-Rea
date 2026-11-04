@@ -18,6 +18,9 @@ public sealed record VideoStream(string FormatId, string Url, string Protocol, s
 
 public enum VideoStage { Downloading, Joining }
 
+/// <summary>The video tools (yt-dlp, Deno, FFmpeg): all installed, or being installed (0 to 100), or why setup failed.</summary>
+public sealed record ToolStatus(bool Ready, string? YtDlpVersion, bool Installing, int Percent, string? Error);
+
 /// <summary>A download of what a page plays: its streams are fetched by the engine, then joined into one file.</summary>
 public sealed record VideoJob(string PageUrl, string ChoiceId, string Container, IReadOnlyList<VideoStream> Streams,
     VideoStage Stage = VideoStage.Downloading, string? Title = null);

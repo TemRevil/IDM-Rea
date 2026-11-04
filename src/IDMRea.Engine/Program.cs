@@ -24,11 +24,16 @@ try
 #else
     IEngineShell shell = new NullShell();
 #endif
-    await using var manager = new DownloadManager(Protocol.DataDirectory, new ManagerOptions(Recycle: shell.Recycle));
+    // Video tools and direct-file checks: redirects are followed by RedirectHandler, so cookies never reach another host.
+    using var web = new HttpClient(new RedirectHandler(new System.Net.Http.SocketsHttpHandler { UseCookies = false, AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(30) }))
+        { Timeout = Timeout.InfiniteTimeSpan };
+    var tools = new VideoTools(Protocol.DataDirectory, web, ToolSources.Official, TimeProvider.System);
+    var video = new VideoSupport(tools, new ProcessRunner(), Path.Combine(Protocol.DataDirectory, "temp"), web);
+    await using var manager = new DownloadManager(Protocol.DataDirectory, new ManagerOptions(Recycle: shell.Recycle, Video: new VideoServices(video, video)));
 #if WINDOWS
     windows.Attach(manager, stopped);
 #endif
-    await new EngineHost(manager, shell).RunAsync(stopped.Token);
+    await new EngineHost(manager, shell, video).RunAsync(stopped.Token);
 }
 finally { finished.Set(); }
 return 0;

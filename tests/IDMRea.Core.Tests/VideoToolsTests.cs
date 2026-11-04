@@ -121,6 +121,18 @@ public sealed class VideoToolsTests : IDisposable
         Assert.Equal(calls, web.Calls($"{Host}/api/yt-dlp"));
     }
 
+    [Fact]
+    public async Task UpdateNowLooksEvenWhenTodayWasChecked()
+    {
+        Publish();
+        var tools = Tools();
+        await tools.EnsureAsync(null, default);
+        Publish("2026.11.04");
+        Assert.False(await tools.UpdateYtDlpAsync(default)); // the daily look waits
+        Assert.True(await tools.UpdateYtDlpAsync(default, force: true));
+        Assert.Equal("2026.11.04", tools.Status().YtDlpVersion);
+    }
+
     private sealed class SyncProgress<T>(Action<T> report) : IProgress<T> { public void Report(T value) => report(value); }
 
     private sealed class FakeReleases : HttpMessageHandler

@@ -18,7 +18,12 @@ public sealed class EngineClient
     {
         // probe and add check the link first, which the engine allows up to Protocol.ProbeLimit.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(request.Command is "probe" or "add" ? Protocol.ProbeLimit + TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(20));
+        deadline.CancelAfter(request.Command switch
+        {
+            "probe" or "add" => Protocol.ProbeLimit + TimeSpan.FromSeconds(15),
+            "probeVideo" or "addVideo" or "updateVideoTools" => Protocol.VideoLimit + TimeSpan.FromSeconds(15),
+            _ => TimeSpan.FromSeconds(20),
+        });
         await using var pipe = await ConnectAsync(deadline.Token);
         using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true);
         using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };

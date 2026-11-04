@@ -16,11 +16,11 @@ public sealed record EngineTotals(int Active, long BytesPerSecond);
 public sealed record EngineRequest(string Command, string? Url = null, string? Folder = null, Guid? Id = null, int Version = 1,
     IReadOnlyList<Guid>? Ids = null, string? FileName = null, bool StartPaused = false, bool DeleteFile = false,
     EngineSettings? Settings = null, string? Referrer = null, string? Cookies = null, string? UserAgent = null,
-    string? ExpectedSha256 = null);
+    string? ExpectedSha256 = null, string? Choice = null, IReadOnlyList<string>? Media = null);
 
 public sealed record EngineResponse(bool Ok, IReadOnlyList<DownloadJob>? Jobs = null, string? Error = null, int Version = 1,
     bool Full = false, IReadOnlyList<Guid>? Removed = null, IReadOnlyDictionary<Guid, long>? Speeds = null,
-    EngineTotals? Totals = null, EngineSettings? Settings = null, ProbeResult? Probe = null);
+    EngineTotals? Totals = null, EngineSettings? Settings = null, ProbeResult? Probe = null, VideoInfo? Video = null, ToolStatus? Tools = null);
 
 public static class Protocol
 {
@@ -32,6 +32,9 @@ public static class Protocol
     };
     /// <summary>The longest a link check may take; <c>probe</c> and <c>add</c> replies can take this long.</summary>
     public static readonly TimeSpan ProbeLimit = TimeSpan.FromSeconds(30);
+    /// <summary>The longest asking yt-dlp about a page may take (it runs the site's player code); <c>probeVideo</c>,
+    /// <c>addVideo</c> and <c>updateVideoTools</c> replies can take this long.</summary>
+    public static readonly TimeSpan VideoLimit = TimeSpan.FromSeconds(90);
     public static string DataDirectory => Path.GetFullPath(Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IDMRea"));
     /// <summary>The copy of the extension the browser loads: kept in the data folder so it survives the app being updated or moved.</summary>
     public static string ExtensionFolderFor(string dataFolder) => Path.Combine(Path.GetFullPath(dataFolder), "browser", "extension");

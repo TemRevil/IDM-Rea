@@ -25,7 +25,7 @@ public sealed class NullShell : IEngineShell
 }
 
 /// <summary>Serves the engine pipe: one JSON request line, one JSON reply line; <c>subscribe</c> keeps the line open for pushes.</summary>
-public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
+public sealed class EngineHost(DownloadManager manager, IEngineShell shell, VideoSupport? video = null)
 {
     private static readonly TimeSpan PushEvery = TimeSpan.FromMilliseconds(250), ReadTimeout = TimeSpan.FromSeconds(15);
     private readonly object gate = new();
@@ -112,7 +112,9 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
     private async Task<EngineResponse> HandleAsync(EngineRequest request, CancellationToken token)
     {
         IEnumerable<Guid> Targets() => request.Ids is { Count: > 0 } ids ? ids : [request.Id ?? throw new ArgumentException("Missing job ID.")];
-        ProbeResult? probe = null; EngineSettings? settings = null;
+        ProbeResult? probe = null; EngineSettings? settings = null; VideoInfo? info = null; ToolStatus? tools = null;
+        VideoSupport Video() => video ?? throw new InvalidOperationException("Video downloads aren't available.");
+        RequestHeaders Headers() => new(request.Referrer, request.Cookies, request.UserAgent, request.Url);
         switch (request.Command)
         {
             case "list": break;
@@ -133,10 +135,22 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
                 await manager.ApplySettingsAsync(request.Settings ?? throw new ArgumentException("Missing settings."));
                 settings = manager.Settings; break;
             case "registerBrowser": shell.RegisterBrowser(); break;
+            case "probeVideo":
+                tools = Video().Prepare();
+                if (tools.Ready) info = await Video().ProbeAsync(request.Url ?? throw new ArgumentException("Missing URL."), Headers(), request.Media, token);
+                break;
+            case "addVideo":
+                var choice = request.Choice ?? throw new ArgumentException("Missing quality.");
+                if (choice == VideoSupport.FileChoice) await manager.AddAsync(request.Url ?? "", request.Folder, null, request.StartPaused, Headers());
+                else await manager.AddVideoAsync(request.Url ?? "", choice, request.Folder, request.StartPaused, Headers());
+                break;
+            case "videoTools": tools = Video().Status(); break;
+            case "updateVideoTools": tools = await Video().UpdateAsync(token); break;
             case "shutdown": break;
             default: throw new ArgumentException("Unknown command.");
         }
-        return new(true, manager.Snapshot(), Version: Protocol.CurrentVersion, Speeds: manager.Speeds(), Totals: manager.Totals(), Settings: settings, Probe: probe);
+        return new(true, manager.Snapshot(), Version: Protocol.CurrentVersion, Speeds: manager.Speeds(), Totals: manager.Totals(), Settings: settings, Probe: probe,
+            Video: info, Tools: tools);
     }
 
     /// <summary>First a full picture, then at most one line every 250 ms with what changed. Quiet while nothing changes.</summary>

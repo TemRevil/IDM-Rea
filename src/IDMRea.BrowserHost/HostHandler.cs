@@ -5,7 +5,8 @@ namespace IDMRea.BrowserHost;
 /// <summary>
 /// Answers the extension. <c>hello</c>: is IDM-Rea there, and should it take over browser downloads.
 /// <c>add</c>: download a link with the page's referrer, cookies and user agent (and the site's checksum, if any).
-/// <c>open</c>: show the app. Every reply carries the message's <c>id</c> back.
+/// <c>probeVideo</c>: what the page plays (or how far the video tools' setup got); <c>addVideo</c>: download it in a
+/// chosen quality. <c>open</c>: show the app. Every reply carries the message's <c>id</c> back.
 /// </summary>
 public sealed class HostHandler(Func<EngineRequest, Task<EngineResponse>> send, Action? openApp = null)
 {
@@ -43,6 +44,14 @@ public sealed class HostHandler(Func<EngineRequest, Task<EngineResponse>> send, 
                         Referrer: Text(message, "referrer"), Cookies: Text(message, "cookies"), UserAgent: Text(message, "userAgent"),
                         ExpectedSha256: Text(message, "sha256")));
                     return added.Ok ? new { id, ok = true } : Failed(id, added.Error);
+                case "probeVideo":
+                    var found = await send(new("probeVideo", Url: Text(message, "url"), Version: Protocol.CurrentVersion,
+                        Referrer: Text(message, "referrer"), Cookies: Text(message, "cookies"), UserAgent: Text(message, "userAgent"), Media: Texts(message, "media")));
+                    return found.Ok ? new { id, ok = true, video = found.Video, tools = found.Tools } : Failed(id, found.Error);
+                case "addVideo":
+                    var queued = await send(new("addVideo", Url: Text(message, "url"), Choice: Text(message, "choice"), Version: Protocol.CurrentVersion,
+                        Referrer: Text(message, "referrer"), Cookies: Text(message, "cookies"), UserAgent: Text(message, "userAgent")));
+                    return queued.Ok ? new { id, ok = true } : Failed(id, queued.Error);
                 case "open":
                     openApp?.Invoke();
                     return new { id, ok = true };
@@ -57,6 +66,11 @@ public sealed class HostHandler(Func<EngineRequest, Task<EngineResponse>> send, 
     }
 
     private static object Failed(int? id, string? error) => new { id, ok = false, error = error ?? "Something went wrong." };
+
+    private static IReadOnlyList<string>? Texts(JsonElement message, string name) =>
+        message.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray().Where(v => v.ValueKind == JsonValueKind.String).Select(v => v.GetString()!).Take(20).ToArray()
+            : null;
 
     private static string? Text(JsonElement message, string name) =>
         message.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

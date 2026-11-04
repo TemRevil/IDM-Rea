@@ -1,3 +1,4 @@
+using IDMRea.Contracts;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -19,8 +20,6 @@ public sealed record ToolSources(string YtDlpApi, string DenoApi, string FfmpegA
 
 /// <summary>Setup progress across all the tools being installed, 0 to 100.</summary>
 public sealed record ToolProgress(string Tool, int Percent);
-
-public sealed record ToolStatus(bool Ready, string? YtDlpVersion, bool Installing, int Percent, string? Error);
 
 /// <summary>
 /// yt-dlp (finds a video's real addresses), Deno (yt-dlp needs it for YouTube) and FFmpeg (joins picture and sound),
@@ -116,12 +115,12 @@ public sealed partial class VideoTools(string dataFolder, HttpClient http, ToolS
         finally { installing.Release(); }
     }
 
-    /// <summary>Fetches a newer yt-dlp when the last check is a day old. True when it was swapped in; a copy fetched
-    /// while yt-dlp runs waits for the next <see cref="EnsureAsync"/>.</summary>
-    public async Task<bool> UpdateYtDlpAsync(CancellationToken token)
+    /// <summary>Fetches a newer yt-dlp when the last check is a day old, or now with <paramref name="force"/>. True
+    /// when it was swapped in; a copy fetched while yt-dlp runs waits for the next <see cref="EnsureAsync"/>.</summary>
+    public async Task<bool> UpdateYtDlpAsync(CancellationToken token, bool force = false)
     {
         if (!File.Exists(YtDlp)) return false;
-        if (File.Exists(CheckedFile) && DateTimeOffset.TryParse(File.ReadAllText(CheckedFile), out var last) && time.GetUtcNow() - last < UpdateEvery) return false;
+        if (!force && File.Exists(CheckedFile) && DateTimeOffset.TryParse(File.ReadAllText(CheckedFile), out var last) && time.GetUtcNow() - last < UpdateEvery) return false;
         await installing.WaitAsync(token);
         try
         {
