@@ -201,8 +201,15 @@ function Choose($app, $combo, $item) {
  $box.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
  Start-Sleep -Milliseconds 400
 }
+# Settings shows one section at a time, chosen from the tabs at the top.
+function Select-Section($app, $name) {
+ Wait-For { Find-Named $app $name } "the $name settings tab"
+ (Find-Named $app $name).GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Wait-For { Find-Named $app "$name settings" } "the $name settings section"
+}
 function Test-Settings($app) {
  Select-Nav $app 'Settings'
+ Select-Section $app 'Downloads'
  Wait-For { Find-Named $app 'Parts per file' } 'the Settings page'
  $arabic = [string][char]0x0662 + [char]0x0660
  Commit-Field $app 'Parts per file' $arabic
@@ -212,15 +219,20 @@ function Test-Settings($app) {
  Wait-For { (Find-Named $app 'Parts per file: 16') -and -not (Find-Named $app 'Parts per file') -and (Send-Engine @{command='getSettings'}).settings.ultraPerformance } 'Parts per file shown as 16 and not editable under Ultra performance'
  Commit-Field $app 'Downloads at once' '1'
  Wait-For { (Send-Engine @{command='getSettings'}).settings.downloadsAtOnce -eq 1 } 'Downloads at once = 1 in the engine'
+ Select-Section $app 'General'
  Choose $app 'Theme' 'Light'
  Wait-For { (Send-Engine @{command='getSettings'}).settings.theme -eq 'Light' } 'Theme Light in the engine'
  Capture $app '05-settings-light.png'
  Choose $app 'Theme' 'Dark'
  Wait-For { (Send-Engine @{command='getSettings'}).settings.theme -eq 'Dark' } 'Theme Dark in the engine'
  Capture $app '05-settings-dark.png'
+ Select-Section $app 'Downloads'
+ $ultra = Find-Named $app 'Ultra performance'
  $ultra.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
  Wait-For { $parts = Find-Named $app 'Parts per file'; $parts.Current.IsEnabled -and (Value $parts) -eq '16' } 'Parts per file back to 16 and editable'
+ Select-Section $app 'General'
  Choose $app 'Theme' 'System'
+ Select-Section $app 'Downloads'
  Commit-Field $app 'Downloads at once' '3'
  Select-Nav $app 'All downloads'
 }

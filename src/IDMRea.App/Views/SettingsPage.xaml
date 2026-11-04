@@ -11,9 +11,6 @@
             <Setter Property="MinHeight" Value="64"/>
             <Setter Property="ColumnSpacing" Value="16"/>
         </Style>
-        <Style x:Key="Section" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-            <Setter Property="Margin" Value="2,22,0,6"/>
-        </Style>
         <Style x:Key="Label" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
@@ -29,153 +26,156 @@
             <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4"/>
             <InfoBar x:Name="ErrorBar" Severity="Error" IsOpen="False" IsClosable="True"/>
 
-            <TextBlock Text="General" Style="{StaticResource Section}"/>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="When I close the window" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                <ComboBox x:Name="CloseBox" Grid.Column="1" MinWidth="260" AutomationProperties.Name="When I close the window" SelectionChanged="Setting_Changed">
-                    <ComboBoxItem Content="Keep downloading in the tray" Tag="KeepInTray"/>
-                    <ComboBoxItem Content="Pause everything and quit" Tag="PauseAllAndQuit"/>
-                </ComboBox>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Start with Windows" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                    <TextBlock Text="Starts quietly in the notification area and carries on unfinished downloads." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <ToggleSwitch x:Name="StartupSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Start with Windows" Toggled="Setting_Changed"/>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="Notify when a download finishes" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                <ToggleSwitch x:Name="DoneSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Notify when a download finishes" Toggled="Setting_Changed"/>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="Notify when a download fails" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                <ToggleSwitch x:Name="FailSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Notify when a download fails" Toggled="Setting_Changed"/>
-            </Grid>
-
-            <TextBlock Text="Downloads" Style="{StaticResource Section}"/>
-            <Grid Style="{StaticResource Card}">
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <StackPanel Spacing="2" Margin="0,0,0,12">
-                    <TextBlock Text="Save folders" Style="{StaticResource Label}"/>
-                    <TextBlock Text="Each kind of file goes to its own folder. New downloads use these; you can change the folder for one download in the Add dialog." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <StackPanel x:Name="FolderRows" Grid.Row="1" Spacing="8"/>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Downloads at once" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                    <TextBlock Text="1 to 10. The rest wait in the queue." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <TextBox x:Name="AtOnceBox" Grid.Column="1" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Downloads at once"
-                         LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Parts per file" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                    <TextBlock x:Name="PartsHint" Text="1 to 16. More parts can be faster on servers that allow it." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <Grid Grid.Column="1" Width="96" VerticalAlignment="Center">
-                    <TextBox x:Name="PartsBox" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Parts per file"
-                             LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
-                    <TextBlock x:Name="PartsLocked" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                </Grid>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Speed limit" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                    <TextBlock Text="Shared by all downloads. Changes apply at once." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBox x:Name="LimitBox" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Speed limit value"
-                             LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
-                    <ComboBox x:Name="LimitUnit" AutomationProperties.Name="Speed limit unit" SelectionChanged="Setting_Changed">
-                        <ComboBoxItem Content="KB/s"/>
-                        <ComboBoxItem Content="MB/s"/>
+            <SelectorBar x:Name="Sections" Margin="-4,4,0,12" SelectionChanged="Sections_SelectionChanged">
+                <SelectorBarItem Text="General" Tag="GeneralSection" IsSelected="True"/>
+                <SelectorBarItem Text="Downloads" Tag="DownloadsSection"/>
+                <SelectorBarItem Text="Browser" Tag="BrowserSection"/>
+                <SelectorBarItem Text="About" Tag="AboutSection"/>
+            </SelectorBar>
+            <StackPanel x:Name="GeneralSection" Spacing="4" AutomationProperties.Name="General settings">
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="When I close the window" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                    <ComboBox x:Name="CloseBox" Grid.Column="1" MinWidth="260" AutomationProperties.Name="When I close the window" SelectionChanged="Setting_Changed">
+                        <ComboBoxItem Content="Keep downloading in the tray" Tag="KeepInTray"/>
+                        <ComboBoxItem Content="Pause everything and quit" Tag="PauseAllAndQuit"/>
                     </ComboBox>
-                    <ToggleSwitch x:Name="LimitSwitch" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Speed limit" Toggled="Setting_Changed"/>
-                </StackPanel>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Auto-retry attempts" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                    <TextBlock Text="0 to 10. Waits a little longer before each try and honours the server's own wait time." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <TextBox x:Name="RetryBox" Grid.Column="1" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Auto-retry attempts"
-                         LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
-            </Grid>
-
-            <TextBlock Text="Browser" Style="{StaticResource Section}"/>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Connect to your browser" Style="{StaticResource Label}"/>
-                    <TextBlock Text="The IDM-Rea extension for Chrome, Edge and other Chromium browsers marks the real files on a page, stops click traps and bad sites, and sends downloads here." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <Button x:Name="AddBrowserButton" Grid.Column="1" Content="Add to browser" AutomationProperties.Name="Add to browser" Click="AddBrowser_Click"/>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Take over browser downloads" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                    <TextBlock Text="Downloads the browser starts come to IDM-Rea instead, with the site's sign-in kept." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <ToggleSwitch x:Name="BrowserSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Take over browser downloads" Toggled="Setting_Changed"/>
-            </Grid>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Smallest file to take over" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                    <TextBlock Text="In MB, 0 to 1024. Smaller files stay in the browser; 0 takes over every file." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <TextBox x:Name="BrowserMinBox" Grid.Column="1" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Smallest file to take over, in MB"
-                         LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
-            </Grid>
-
-            <TextBlock Text="Performance" Style="{StaticResource Section}"/>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="Ultra performance" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                    <TextBlock Text="Uses up to 16 parts per file and larger buffers to download as fast as possible. The app itself stays light." Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <ToggleSwitch x:Name="UltraSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Ultra performance" Toggled="Setting_Changed"/>
-            </Grid>
-
-            <TextBlock Text="Appearance" Style="{StaticResource Section}"/>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="Theme" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
-                <ComboBox x:Name="ThemeBox" Grid.Column="1" MinWidth="160" AutomationProperties.Name="Theme" SelectionChanged="Setting_Changed">
-                    <ComboBoxItem Content="System" Tag="System"/>
-                    <ComboBoxItem Content="Light" Tag="Light"/>
-                    <ComboBoxItem Content="Dark" Tag="Dark"/>
-                </ComboBox>
-            </Grid>
-
-            <TextBlock Text="About" Style="{StaticResource Section}"/>
-            <Grid Style="{StaticResource Card}">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <Image x:Name="AboutIcon" Width="40" Height="40" VerticalAlignment="Center"/>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="IDM-Rea" Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                    <TextBlock x:Name="VersionText" Style="{StaticResource Hint}"/>
-                    <TextBlock x:Name="EngineText" Style="{StaticResource Hint}"/>
-                </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button Content="Open data folder" AutomationProperties.Name="Open data folder" Click="DataFolder_Click"/>
-                    <Button x:Name="EngineButton" Content="Stop engine" Click="Engine_Click"/>
-                </StackPanel>
-            </Grid>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Start with Windows" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="Starts quietly in the notification area and carries on unfinished downloads." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="StartupSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Start with Windows" Toggled="Setting_Changed"/>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Notify when a download finishes" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                    <ToggleSwitch x:Name="DoneSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Notify when a download finishes" Toggled="Setting_Changed"/>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Notify when a download fails" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                    <ToggleSwitch x:Name="FailSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Notify when a download fails" Toggled="Setting_Changed"/>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Theme" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                    <ComboBox x:Name="ThemeBox" Grid.Column="1" MinWidth="160" AutomationProperties.Name="Theme" SelectionChanged="Setting_Changed">
+                        <ComboBoxItem Content="System" Tag="System"/>
+                        <ComboBoxItem Content="Light" Tag="Light"/>
+                        <ComboBoxItem Content="Dark" Tag="Dark"/>
+                    </ComboBox>
+                </Grid>
+            </StackPanel>
+            <StackPanel x:Name="DownloadsSection" Spacing="4" Visibility="Collapsed" AutomationProperties.Name="Downloads settings">
+                <Grid Style="{StaticResource Card}">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel Spacing="2" Margin="0,0,0,12">
+                        <TextBlock Text="Save folders" Style="{StaticResource Label}"/>
+                        <TextBlock Text="Each kind of file goes to its own folder. New downloads use these; you can change the folder for one download in the Add dialog." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <StackPanel x:Name="FolderRows" Grid.Row="1" Spacing="8"/>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Downloads at once" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="1 to 10. The rest wait in the queue." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <TextBox x:Name="AtOnceBox" Grid.Column="1" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Downloads at once"
+                             LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Parts per file" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock x:Name="PartsHint" Text="1 to 16. More parts can be faster on servers that allow it." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <Grid Grid.Column="1" Width="96" VerticalAlignment="Center">
+                        <TextBox x:Name="PartsBox" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Parts per file"
+                                 LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
+                        <TextBlock x:Name="PartsLocked" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </Grid>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Speed limit" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="Shared by all downloads. Changes apply at once." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBox x:Name="LimitBox" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Speed limit value"
+                                 LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
+                        <ComboBox x:Name="LimitUnit" AutomationProperties.Name="Speed limit unit" SelectionChanged="Setting_Changed">
+                            <ComboBoxItem Content="KB/s"/>
+                            <ComboBoxItem Content="MB/s"/>
+                        </ComboBox>
+                        <ToggleSwitch x:Name="LimitSwitch" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Speed limit" Toggled="Setting_Changed"/>
+                    </StackPanel>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Auto-retry attempts" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="0 to 10. Waits a little longer before each try and honours the server's own wait time." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <TextBox x:Name="RetryBox" Grid.Column="1" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Auto-retry attempts"
+                             LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Ultra performance" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="Uses up to 16 parts per file and larger buffers to download as fast as possible. The app itself stays light." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="UltraSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Ultra performance" Toggled="Setting_Changed"/>
+                </Grid>
+            </StackPanel>
+            <StackPanel x:Name="BrowserSection" Spacing="4" Visibility="Collapsed" AutomationProperties.Name="Browser settings">
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Connect to your browser" Style="{StaticResource Label}"/>
+                        <TextBlock Text="The IDM-Rea extension for Chrome, Edge and other Chromium browsers marks the real files on a page, stops click traps and bad sites, and sends downloads here." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <Button x:Name="AddBrowserButton" Grid.Column="1" Content="Add to browser" AutomationProperties.Name="Add to browser" Click="AddBrowser_Click"/>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Take over browser downloads" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="Downloads the browser starts come to IDM-Rea instead, with the site's sign-in kept." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="BrowserSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Take over browser downloads" Toggled="Setting_Changed"/>
+                </Grid>
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Smallest file to take over" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="In MB, 0 to 1024. Smaller files stay in the browser; 0 takes over every file." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <TextBox x:Name="BrowserMinBox" Grid.Column="1" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Smallest file to take over, in MB"
+                             LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
+                </Grid>
+            </StackPanel>
+            <StackPanel x:Name="AboutSection" Spacing="4" Visibility="Collapsed" AutomationProperties.Name="About settings">
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Image x:Name="AboutIcon" Width="40" Height="40" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="IDM-Rea" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        <TextBlock x:Name="VersionText" Style="{StaticResource Hint}"/>
+                        <TextBlock x:Name="EngineText" Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Content="Open data folder" AutomationProperties.Name="Open data folder" Click="DataFolder_Click"/>
+                        <Button x:Name="EngineButton" Content="Stop engine" Click="Engine_Click"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Page>

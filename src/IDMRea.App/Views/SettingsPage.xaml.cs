@@ -272,6 +272,14 @@ public sealed partial class SettingsPage : Page
         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(data);
     }
 
+    /// <summary>One section shows at a time; the tab's tag names its panel.</summary>
+    private void Sections_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        var chosen = sender.SelectedItem?.Tag as string;
+        foreach (var panel in new[] { GeneralSection, DownloadsSection, BrowserSection, AboutSection })
+            panel.Visibility = panel.Name == chosen ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void DataFolder_Click(object sender, RoutedEventArgs e)
     {
         Directory.CreateDirectory(Protocol.DataDirectory);
