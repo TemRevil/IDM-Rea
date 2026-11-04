@@ -1,0 +1,88 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+namespace IDMRea.Tests;
+
+/// <summary>A small HTTP/1.1 server on loopback with switchable misbehaviour, for download tests.</summary>
+internal sealed class Fixture : IAsyncDisposable
+{
+    private readonly TcpListener listener = new(IPAddress.Loopback, 0);
+    private readonly CancellationTokenSource stop = new();
+    private readonly Task loop;
+    private readonly ConcurrentBag<Task> requests = [];
+    private readonly Lazy<byte[]> body;
+    public Fixture() { body = new(() => RandomNumberGenerator.GetBytes(BodySize)); listener.Start(); loop = Accept(); }
+
+    public int BodySize { get; init; } = 1024 * 1024;
+    public byte[] Body => body.Value;
+    public string Mode { get; init; } = "range";
+    public int Delay { get; init; }
+    public string Path { get; init; } = "/file.bin";
+    public Dictionary<string, string> Headers { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool RedirectOnce { get; init; }
+    public int? Status { get; init; }
+    public string? LastRange { get; private set; }
+    public ConcurrentQueue<string?> Ranges { get; } = new();
+    public ConcurrentQueue<string> Targets { get; } = new();
+    private int requestCount, redirected;
+    public int RequestCount => Volatile.Read(ref requestCount);
+    public string Url => $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}{Path}";
+
+    private async Task Accept()
+    {
+        try { while (!stop.IsCancellationRequested) { var client = await listener.AcceptTcpClientAsync(stop.Token); requests.Add(Serve(client)); } }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException) { }
+    }
+
+    private async Task Serve(TcpClient client)
+    {
+        using (client)
+        try
+        {
+            var stream = client.GetStream(); using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, true);
+            var requestLine = await reader.ReadLineAsync(stop.Token) ?? ""; string? line; string? range = null;
+            while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync(stop.Token))) if (line.StartsWith("Range:", StringComparison.OrdinalIgnoreCase)) range = line[6..].Trim();
+            Interlocked.Increment(ref requestCount);
+            Targets.Enqueue(requestLine.Split(' ').ElementAtOrDefault(1) ?? "");
+            LastRange = range; Ranges.Enqueue(range);
+            if (RedirectOnce && Interlocked.Exchange(ref redirected, 1) == 0)
+            {
+                await Write(stream, $"HTTP/1.1 302 Found\r\nLocation: /moved{Path}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"); return;
+            }
+            if (Status is int status)
+            {
+                await Write(stream, $"HTTP/1.1 {status} Status\r\nContent-Length: 0\r\nConnection: close\r\n{ExtraHeaders()}\r\n"); return;
+            }
+            long offset = 0; long? last = null;
+            if (range != null)
+            {
+                var spec = range.Split('=')[1].Split('-');
+                offset = long.Parse(spec[0]); if (spec[1].Length > 0) last = long.Parse(spec[1]);
+            }
+            var length = Body.Length;
+            var partial = range != null && Mode is not ("ignore" or "change-full"); if (!partial) { offset = 0; last = null; }
+            var end = Math.Min(last ?? length - 1, length - 1); // inclusive
+            var header = $"HTTP/1.1 {(partial ? "206 Partial Content" : "200 OK")}\r\nConnection: close\r\n";
+            if (Mode is not ("unknown-length" or "overrun-range")) header += $"Content-Length: {end - offset + 1}\r\n";
+            if (Mode == "last-modified") header += "Last-Modified: Thu, 01 Jan 2026 00:00:00 GMT\r\n";
+            if (Mode is not ("no-validator" or "last-modified")) header += $"ETag: {(Mode is "bad-validator" or "change-full" ? "\"v2\"" : "\"v1\"")}\r\n";
+            if (partial) header += $"Content-Range: bytes {(Mode == "bad-range" ? offset + 1 : offset)}-{end}/{length}\r\n";
+            await Write(stream, header + ExtraHeaders() + "\r\n");
+            var stopAt = Mode == "truncate" ? length / 2 : Mode == "overrun-range" ? (long)length * 2 : end + 1;
+            for (var i = offset; i < stopAt; i += 8192)
+            {
+                var count = (int)Math.Min(8192, stopAt - i);
+                await stream.WriteAsync(Body.AsMemory((int)(i % length), Math.Min(count, length - (int)(i % length))), stop.Token);
+                if (Delay > 0) await Task.Delay(Delay, stop.Token);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or OperationCanceledException or SocketException or ObjectDisposedException) { }
+    }
+
+    private string ExtraHeaders() => string.Concat(Headers.Select(h => $"{h.Key}: {h.Value}\r\n"));
+    private Task Write(NetworkStream stream, string text) => stream.WriteAsync(Encoding.UTF8.GetBytes(text), stop.Token).AsTask();
+
+    public async ValueTask DisposeAsync() { stop.Cancel(); listener.Stop(); await loop; await Task.WhenAll(requests); stop.Dispose(); }
+}
