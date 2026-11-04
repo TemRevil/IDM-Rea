@@ -1,5 +1,23 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><IsTestProject>true</IsTestProject></PropertyGroup><ItemGroup>
-<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0"/><PackageReference Include="xunit" Version="2.9.3"/><PackageReference Include="xunit.runner.visualstudio" Version="3.1.5"/>
-<ProjectReference Include="../../src/IDMRea.Core/IDMRea.Core.csproj"/><ProjectReference Include="../../src/IDMRea.Engine/IDMRea.Engine.csproj"/>
-<Compile Include="../../src/IDMRea.App/EngineClient.cs" Link="EngineClient.cs"/>
-</ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <ProjectReference Include="../../src/IDMRea.Core/IDMRea.Core.csproj" />
+    <ProjectReference Include="../../src/IDMRea.Engine/IDMRea.Engine.csproj" />
+    <Compile Include="../../src/IDMRea.App/EngineClient.cs" Link="EngineClient.cs" />
+  </ItemGroup>
+  <!-- The Windows target runs only the Windows-specific tests; everything else runs once, on net10.0. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <Compile Remove="*.cs" />
+    <Compile Include="WindowsTests.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'">
+    <Compile Remove="WindowsTests.cs" />
+  </ItemGroup>
+</Project>
