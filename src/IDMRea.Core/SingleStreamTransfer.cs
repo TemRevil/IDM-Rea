@@ -19,6 +19,7 @@ public static class SingleStreamTransfer
         file.SetLength(offset); file.Position = offset;
         using var request = new HttpRequestMessage(HttpMethod.Get, job.ResolvedUrl ?? job.Url);
         request.Headers.AcceptEncoding.ParseAdd("identity");
+        ctx.Headers.ApplyTo(request);
         if (offset > 0)
         {
             request.Headers.Range = new RangeHeaderValue(offset, null);

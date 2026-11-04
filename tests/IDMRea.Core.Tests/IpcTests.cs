@@ -184,6 +184,24 @@ public sealed class IpcTests
     }
 
     [Fact]
+    public async Task IpcAddCarriesBrowserHeaders()
+    {
+        await using var server = new Fixture();
+        await using var host = new Host();
+        var added = await host.Send(new("add", Url: server.Url, Folder: host.Root, Version: 2,
+            Referrer: "https://site.example/page", Cookies: "session=abc123", UserAgent: "TestBrowser/1.0"));
+        Assert.True(added.Ok, added.Error);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (host.Manager.Snapshot().Single().Status != DownloadStatus.Completed) await Task.Delay(25, timeout.Token);
+        Assert.All(server.RequestHeaders, h =>
+        {
+            Assert.Equal("https://site.example/page", h.GetValueOrDefault("Referer"));
+            Assert.Equal("session=abc123", h.GetValueOrDefault("Cookie"));
+            Assert.Equal("TestBrowser/1.0", h.GetValueOrDefault("User-Agent"));
+        });
+    }
+
+    [Fact]
     public async Task ConcurrentClientsDuringSubscribe()
     {
         await using var host = new Host();

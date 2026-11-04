@@ -24,7 +24,7 @@ public sealed record DownloadJob(Guid Id, string Url, string Destination, string
     Category Category = Category.Other, DateTimeOffset CreatedAt = default, DateTimeOffset? CompletedAt = null,
     int Attempts = 0, DateTimeOffset? NextRetryAt = null, ErrorKind ErrorKind = ErrorKind.None, int? HttpStatus = null,
     IReadOnlyList<DownloadPart>? Parts = null, PausedBy PausedBy = PausedBy.None, bool Resumable = false,
-    string? ResolvedUrl = null)
+    string? ResolvedUrl = null, string? Referrer = null, string? UserAgent = null, string? ProtectedCookies = null)
 {
     [JsonIgnore] public string FileName => Path.GetFileName(Destination);
 }

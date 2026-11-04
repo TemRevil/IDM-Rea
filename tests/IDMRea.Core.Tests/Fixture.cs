@@ -39,6 +39,8 @@ internal sealed class Fixture : IAsyncDisposable
     public string? LastRange { get; private set; }
     public ConcurrentQueue<string?> Ranges { get; } = new();
     public ConcurrentQueue<string> Targets { get; } = new();
+    /// <summary>The headers of every request, in arrival order.</summary>
+    public ConcurrentQueue<Dictionary<string, string>> RequestHeaders { get; } = new();
     private int requestCount, redirected, current, maxConcurrent, dropped;
     public int RequestCount => Volatile.Read(ref requestCount);
     public int MaxConcurrent => Volatile.Read(ref maxConcurrent);
@@ -58,7 +60,13 @@ internal sealed class Fixture : IAsyncDisposable
         {
             var stream = client.GetStream(); using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, true);
             var requestLine = await reader.ReadLineAsync(stop.Token) ?? ""; string? line; string? range = null;
-            while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync(stop.Token))) if (line.StartsWith("Range:", StringComparison.OrdinalIgnoreCase)) range = line[6..].Trim();
+            var received = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync(stop.Token)))
+            {
+                if (line.StartsWith("Range:", StringComparison.OrdinalIgnoreCase)) range = line[6..].Trim();
+                if (line.IndexOf(':') is > 0 and var colon) received[line[..colon].Trim()] = line[(colon + 1)..].Trim();
+            }
+            RequestHeaders.Enqueue(received);
             var index = Interlocked.Increment(ref requestCount);
             var now = Interlocked.Increment(ref current); int seen;
             while (now > (seen = Volatile.Read(ref maxConcurrent)) && Interlocked.CompareExchange(ref maxConcurrent, now, seen) != seen) { }

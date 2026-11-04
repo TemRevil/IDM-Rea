@@ -12,7 +12,8 @@ public sealed record EngineTotals(int Active, long BytesPerSecond);
 
 public sealed record EngineRequest(string Command, string? Url = null, string? Folder = null, Guid? Id = null, int Version = 1,
     IReadOnlyList<Guid>? Ids = null, string? FileName = null, bool StartPaused = false, bool DeleteFile = false,
-    EngineSettings? Settings = null);
+    EngineSettings? Settings = null, string? Referrer = null, string? Cookies = null, string? UserAgent = null,
+    string? ExpectedSha256 = null);
 
 public sealed record EngineResponse(bool Ok, IReadOnlyList<DownloadJob>? Jobs = null, string? Error = null, int Version = 1,
     bool Full = false, IReadOnlyList<Guid>? Removed = null, IReadOnlyDictionary<Guid, long>? Speeds = null,

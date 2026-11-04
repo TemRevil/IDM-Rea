@@ -21,6 +21,8 @@ public sealed class DownloadManager : IAsyncDisposable
     private readonly Dictionary<Guid, Worker> workers = [];
     private readonly Dictionary<Guid, ITimer> timers = [];
     private readonly Dictionary<Guid, ProbeResult> probes = [];
+    /// <summary>Cookies as the browser gave them, while the engine runs; on disk they are only kept encrypted.</summary>
+    private readonly Dictionary<Guid, string> cookies = [];
     private readonly SemaphoreSlim controls = new(1);
     private readonly object gate = new();
     private readonly ConcurrencyGate slots;
@@ -44,7 +46,7 @@ public sealed class DownloadManager : IAsyncDisposable
         settings = store.LoadSettings();
         slots = new(settings.DownloadsAtOnce);
         limiter.BytesPerSecond = settings.SpeedLimitBytesPerSecond;
-        http = new(this.options.Handler ?? new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.None, ConnectTimeout = TimeSpan.FromSeconds(30), MaxAutomaticRedirections = 10 })
+        http = new(this.options.Handler ?? new SocketsHttpHandler { UseCookies = false, AutomaticDecompression = DecompressionMethods.None, ConnectTimeout = TimeSpan.FromSeconds(30), MaxAutomaticRedirections = 10 })
         { Timeout = Timeout.InfiniteTimeSpan };
 
         var start = new List<Guid>(); var wait = new List<DownloadJob>();
@@ -100,13 +102,23 @@ public sealed class DownloadManager : IAsyncDisposable
         return job;
     }
 
-    public Task<ProbeResult> ProbeAsync(string url, CancellationToken token = default) => Prober.ProbeAsync(http, url, token);
+    public Task<ProbeResult> ProbeAsync(string url, CancellationToken token = default, RequestHeaders? headers = null) => Prober.ProbeAsync(http, url, token, headers);
 
-    public async Task<DownloadJob> AddAsync(string url, string folder, string? fileName = null, bool startPaused = false)
+    private RequestHeaders? HeadersFor(DownloadJob job)
+    {
+        string? cookie; lock (gate) cookies.TryGetValue(job.Id, out cookie);
+        var headers = new RequestHeaders(job.Referrer, cookie ?? CookieVault.Unprotect(job.ProtectedCookies), job.UserAgent);
+        return headers.IsEmpty ? null : headers;
+    }
+
+    public async Task<DownloadJob> AddAsync(string url, string? folder, string? fileName = null, bool startPaused = false,
+        RequestHeaders? headers = null, string? expectedSha256 = null)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) throw new ArgumentException("Use an absolute HTTP or HTTPS URL.");
-        if (!Path.IsPathFullyQualified(folder)) throw new ArgumentException("Use an absolute destination folder.");
-        var probe = await ProbeAsync(uri.AbsoluteUri);
+        if (folder != null && !Path.IsPathFullyQualified(folder)) throw new ArgumentException("Use an absolute destination folder.");
+        if (headers?.IsEmpty == true) headers = null;
+        var probe = await ProbeAsync(uri.AbsoluteUri, default, headers);
+        folder ??= Settings.FolderFor(probe.Category);
         await controls.WaitAsync();
         try
         {
@@ -118,7 +130,9 @@ public sealed class DownloadManager : IAsyncDisposable
             Save(new DownloadJob(id, uri.AbsoluteUri, destination, destination + "." + id.ToString("N") + ".part",
                 startPaused ? DownloadStatus.Paused : DownloadStatus.Queued, TotalBytes: probe.TotalBytes, ETag: probe.ETag,
                 LastModified: probe.LastModified, Category: probe.Category, CreatedAt: time.GetUtcNow(),
-                PausedBy: startPaused ? PausedBy.Person : PausedBy.None, Resumable: probe.Resumable, ResolvedUrl: probe.ResolvedUrl));
+                PausedBy: startPaused ? PausedBy.Person : PausedBy.None, Resumable: probe.Resumable, ResolvedUrl: probe.ResolvedUrl,
+                Referrer: headers?.Referrer, UserAgent: headers?.UserAgent, ProtectedCookies: CookieVault.Protect(headers?.Cookies)));
+            if (!string.IsNullOrEmpty(headers?.Cookies)) lock (gate) cookies[id] = headers.Cookies;
             if (!startPaused) { lock (gate) probes[id] = probe; Start(id); }
             return Get(id);
         }
@@ -251,7 +265,7 @@ public sealed class DownloadManager : IAsyncDisposable
             if (File.Exists(job.PartialPath)) File.Delete(job.PartialPath);
             if (deleteFile && job.Status == DownloadStatus.Completed && File.Exists(job.Destination) && !Recycle(job.Destination))
                 throw new IOException("Couldn't move the file to the Recycle Bin.");
-            lock (gate) { store.Delete(id); jobs.Remove(id); probes.Remove(id); }
+            lock (gate) { store.Delete(id); jobs.Remove(id); probes.Remove(id); cookies.Remove(id); }
             JobRemoved?.Invoke(id);
         }
         finally { controls.Release(); }
@@ -318,7 +332,7 @@ public sealed class DownloadManager : IAsyncDisposable
     {
         if (job.ResolvedUrl == null || job.ResolvedUrl == job.Url) return job;
         ProbeResult fresh;
-        try { fresh = await ProbeAsync(job.Url, token); }
+        try { fresh = await ProbeAsync(job.Url, token, HeadersFor(job)); }
         catch (Exception) when (!token.IsCancellationRequested) { return job; }
         return fresh.ResolvedUrl == job.ResolvedUrl ? job : Save(job with { ResolvedUrl = fresh.ResolvedUrl });
     }
@@ -333,14 +347,14 @@ public sealed class DownloadManager : IAsyncDisposable
             var startBytes = job.ReceivedBytes;
             // New bytes mean the connection works again, so the retry count starts over.
             var context = new TransferContext(http, limiter, meter, () => Settings,
-                j => Save(j.ReceivedBytes > startBytes && j.Attempts != 0 ? j with { Attempts = 0 } : j), options.WriteFault, options.FreeSpace);
+                j => Save(j.ReceivedBytes > startBytes && j.Attempts != 0 ? j with { Attempts = 0 } : j), options.WriteFault, options.FreeSpace, HeadersFor(job));
             if (job.ReceivedBytes > 0 || job.Parts != null) job = await RefreshLinkAsync(job, token);
             if (job.Parts is { Count: > 0 } && job.Resumable && job.TotalBytes > 0)
                 job = await MultiPartTransfer.RunAsync(job, SavedProbe(job), context, token);
             else if (job.ReceivedBytes == 0 && job.Parts == null)
             {
                 ProbeResult? probe; lock (gate) probes.Remove(id, out probe);
-                probe ??= await ProbeAsync(job.Url, token);
+                probe ??= await ProbeAsync(job.Url, token, HeadersFor(job));
                 job = Save(job with { ResolvedUrl = probe.ResolvedUrl, Resumable = probe.Resumable });
                 job = probe.Resumable && probe.TotalBytes > 0
                     ? await MultiPartTransfer.RunAsync(job, probe, context, token)

@@ -6,14 +6,14 @@ namespace IDMRea.Core;
 /// <summary>Asks the server about a link before downloading: final URL, file name, size, and whether it can resume.</summary>
 public static class Prober
 {
-    public static async Task<ProbeResult> ProbeAsync(HttpClient http, string url, CancellationToken token)
+    public static async Task<ProbeResult> ProbeAsync(HttpClient http, string url, CancellationToken token, RequestHeaders? headers = null)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) throw new ArgumentException("Use an absolute HTTP or HTTPS URL.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(Protocol.ProbeLimit);
-        var response = await SendAsync(http, uri, ranged: true, deadline.Token);
+        var response = await SendAsync(http, uri, ranged: true, headers, deadline.Token);
         if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
         {
-            response.Dispose(); response = await SendAsync(http, uri, ranged: false, deadline.Token);
+            response.Dispose(); response = await SendAsync(http, uri, ranged: false, headers, deadline.Token);
         }
         using (response)
         {
@@ -34,11 +34,12 @@ public static class Prober
     private static string? Header(HttpResponseMessage response, string name) =>
         response.Content.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
 
-    private static async Task<HttpResponseMessage> SendAsync(HttpClient http, Uri uri, bool ranged, CancellationToken token)
+    private static async Task<HttpResponseMessage> SendAsync(HttpClient http, Uri uri, bool ranged, RequestHeaders? headers, CancellationToken token)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.AcceptEncoding.ParseAdd("identity");
         if (ranged) request.Headers.Range = new RangeHeaderValue(0, 0);
+        headers.ApplyTo(request);
         return await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
     }
 

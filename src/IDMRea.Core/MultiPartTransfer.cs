@@ -165,6 +165,7 @@ public static class MultiPartTransfer
             using var request = new HttpRequestMessage(HttpMethod.Get, probe.ResolvedUrl);
             request.Headers.AcceptEncoding.ParseAdd("identity");
             request.Headers.Range = new RangeHeaderValue(from, to);
+            ctx.Headers.ApplyTo(request);
             request.Headers.IfRange = strong ? new RangeConditionHeaderValue(EntityTagHeaderValue.Parse(probe.ETag!)) : new RangeConditionHeaderValue(probe.LastModified!.Value);
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(token); idle.CancelAfter(TimeSpan.FromSeconds(45));
             using var response = await ctx.Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, idle.Token);
