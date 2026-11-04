@@ -19,8 +19,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      # The runner is thrown away, so the Recycle Bin test may leave its file there.
       - run: ./scripts/publish-windows.ps1
         shell: pwsh
+        env:
+          IDMREA_TEST_RECYCLE: '1'
       - uses: actions/upload-artifact@v4
         with:
           name: IDM-Rea-windows-x64

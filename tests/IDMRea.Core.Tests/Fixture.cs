@@ -22,6 +22,12 @@ internal sealed class Fixture : IAsyncDisposable
     public string Path { get; init; } = "/file.bin";
     public Dictionary<string, string> Headers { get; } = new(StringComparer.OrdinalIgnoreCase);
     public bool RedirectOnce { get; init; }
+    /// <summary>Every request to <see cref="Path"/> redirects to a signed link that stops working after <see cref="Expire"/>.</summary>
+    public bool Signed { get; init; }
+    /// <summary>Milliseconds the server waits before it answers at all.</summary>
+    public int HeaderDelay { get; init; }
+    private int generation;
+    public void Expire() => Interlocked.Increment(ref generation);
     public int? Status { get; init; }
     /// <summary>The first request number (from 1) that gets <see cref="Status"/>; earlier ones are served normally.</summary>
     public int StatusFrom { get; init; } = 1;
@@ -65,9 +71,16 @@ internal sealed class Fixture : IAsyncDisposable
     {
         Targets.Enqueue(requestLine.Split(' ').ElementAtOrDefault(1) ?? "");
         LastRange = range; Ranges.Enqueue(range);
+        if (HeaderDelay > 0) await Task.Delay(HeaderDelay, stop.Token);
         if (RedirectOnce && Interlocked.Exchange(ref redirected, 1) == 0)
         {
             await Write(stream, $"HTTP/1.1 302 Found\r\nLocation: /moved{Path}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"); return;
+        }
+        if (Signed)
+        {
+            var target = requestLine.Split(' ').ElementAtOrDefault(1) ?? ""; var live = Volatile.Read(ref generation);
+            if (target == Path) { await Write(stream, $"HTTP/1.1 302 Found{Crlf}Location: /signed/{live}{Path}{Crlf}Content-Length: 0{Crlf}Connection: close{Crlf}{Crlf}"); return; }
+            if (target != $"/signed/{live}{Path}") { await Write(stream, $"HTTP/1.1 403 Expired{Crlf}Content-Length: 0{Crlf}Connection: close{Crlf}{Crlf}"); return; }
         }
         if (CloseFrom is int close && index >= close) return;
         if (Status is int status && index >= StatusFrom)

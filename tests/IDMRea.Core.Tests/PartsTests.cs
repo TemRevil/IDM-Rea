@@ -198,4 +198,60 @@ public sealed class PartsTests
         Assert.All(targets.Skip(1), t => Assert.Equal("/moved/file.bin", t));
         Assert.Equal(server.Url.Replace("/file.bin", "/moved/file.bin"), done.ResolvedUrl);
     }
+
+    /// <summary>A paused download behind an expiring signed link gets a fresh link from its original URL when it resumes.</summary>
+    [Fact]
+    public async Task ResumeRefreshesAnExpiredRedirect()
+    {
+        await using var server = new Fixture { Signed = true, BodySize = 8 * MiB, Delay = 1 };
+        var root = Temp(); var data = Path.Combine(root, "data"); Guid id;
+        await using (var manager = new DownloadManager(data))
+        {
+            id = (await manager.AddAsync(server.Url, root)).Id;
+            await Until(manager, id, j => j.ReceivedBytes > 0.3 * 8 * MiB);
+        }
+        Assert.EndsWith("/signed/0/file.bin", Assert.Single(new JobStore(data).Load()).ResolvedUrl);
+        server.Expire();
+        await using (var manager = new DownloadManager(data))
+        {
+            await manager.ControlAsync(id, resume: true);
+            var done = await Finished(manager, id);
+            Assert.Equal(DownloadStatus.Completed, done.Status);
+            Assert.Equal(server.Body, await File.ReadAllBytesAsync(done.Destination));
+            Assert.EndsWith("/signed/1/file.bin", done.ResolvedUrl);
+        }
+    }
+
+    /// <summary>A sparse part file takes no space up front, so a download that cannot fit fails before it starts.</summary>
+    [Fact]
+    public async Task NotEnoughSpaceFailsBeforeDownloading()
+    {
+        await using var server = new Fixture { BodySize = 8 * MiB };
+        var root = Temp(); var data = Path.Combine(root, "data");
+        await using var manager = new DownloadManager(data, new ManagerOptions(FreeSpace: _ => 8 * MiB - 1));
+        var job = await manager.AddAsync(server.Url, root);
+        var done = await Finished(manager, job.Id);
+        Assert.Equal(DownloadStatus.Failed, done.Status);
+        Assert.Equal(ErrorKind.DiskFull, done.ErrorKind);
+        Assert.Equal(0, done.ReceivedBytes);
+        Assert.DoesNotContain(server.Ranges, r => r != null && r != "bytes=0-0");
+    }
+
+    [Fact]
+    public async Task ResumeNeedsSpaceOnlyForWhatIsLeft()
+    {
+        await using var server = new Fixture { BodySize = 8 * MiB, Delay = 1 };
+        var root = Temp(); var data = Path.Combine(root, "data"); Guid id;
+        await using (var manager = new DownloadManager(data))
+        {
+            id = (await manager.AddAsync(server.Url, root)).Id;
+            await Until(manager, id, j => j.ReceivedBytes > 0.3 * 8 * MiB);
+        }
+        var left = 8 * MiB - Assert.Single(new JobStore(data).Load()).ReceivedBytes;
+        await using (var manager = new DownloadManager(data, new ManagerOptions(FreeSpace: _ => left)))
+        {
+            await manager.ControlAsync(id, resume: true);
+            Assert.Equal(DownloadStatus.Completed, (await Finished(manager, id)).Status);
+        }
+    }
 }

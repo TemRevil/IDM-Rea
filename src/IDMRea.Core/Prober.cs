@@ -9,7 +9,7 @@ public static class Prober
     public static async Task<ProbeResult> ProbeAsync(HttpClient http, string url, CancellationToken token)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) throw new ArgumentException("Use an absolute HTTP or HTTPS URL.");
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(Protocol.ProbeLimit);
         var response = await SendAsync(http, uri, ranged: true, deadline.Token);
         if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
         {
@@ -27,7 +27,7 @@ public static class Prober
             var type = response.Content.Headers.ContentType?.MediaType;
             var name = NameFor(response.Content.Headers.ContentDisposition?.ToString() ?? Header(response, "Content-Disposition"), new Uri(resolved), type);
             var resumable = ranges && total != null && ((etag != null && !etag.IsWeak) || modified != null);
-            return new ProbeResult(uri.AbsoluteUri, resolved, name, total, ranges, etag?.ToString(), modified, type, Categories.From(name, type), resumable);
+            return new ProbeResult(uri.AbsoluteUri, resolved, name, total, etag?.ToString(), modified, type, Categories.From(name, type), resumable);
         }
     }
 

@@ -57,6 +57,9 @@ public static class MultiPartTransfer
             var saved = Job.Parts;
             var keep = saved is { Count: > 0 } && saved.Sum(p => p.Length) == total && RandomAccess.GetLength(handle) == total;
             parts.AddRange(keep ? saved! : PartPlanner.Initial(total, settings.EffectiveParts, settings.MinPartSize));
+            // The sparse file below takes no space up front, so a download that cannot fit has to be caught here.
+            if (ctx.FreeBytes(Job.PartialPath) is long free && free < parts.Sum(p => p.Remaining))
+                throw new TransferException(ErrorKind.DiskFull, "Not enough disk space.");
             SparseFile.Mark(handle);
             if (RandomAccess.GetLength(handle) != total) RandomAccess.SetLength(handle, total);
             claimed.AddRange(parts.Select(p => p.Received));

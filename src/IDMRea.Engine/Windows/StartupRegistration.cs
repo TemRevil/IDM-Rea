@@ -10,10 +10,4 @@ public sealed class StartupRegistration(string keyPath = @"Software\Microsoft\Wi
         if (on) key.SetValue(valueName, $"\"{exePath}\" --tray", RegistryValueKind.String);
         else key.DeleteValue(valueName, throwOnMissingValue: false);
     }
-
-    public bool IsSet()
-    {
-        using var key = Registry.CurrentUser.OpenSubKey(keyPath);
-        return key?.GetValue(valueName) is string;
-    }
 }

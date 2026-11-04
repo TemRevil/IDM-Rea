@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace IDMRea.Contracts;
 
-public sealed record ProbeResult(string Url, string ResolvedUrl, string FileName, long? TotalBytes, bool AcceptsRanges,
+public sealed record ProbeResult(string Url, string ResolvedUrl, string FileName, long? TotalBytes,
     string? ETag, DateTimeOffset? LastModified, string? ContentType, Category Category, bool Resumable);
 
 public sealed record EngineTotals(int Active, long BytesPerSecond);
@@ -26,6 +26,8 @@ public static class Protocol
         Converters = { new JsonStringEnumConverter() },
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
+    /// <summary>The longest a link check may take; <c>probe</c> and <c>add</c> replies can take this long.</summary>
+    public static readonly TimeSpan ProbeLimit = TimeSpan.FromSeconds(30);
     public static string DataDirectory => Path.GetFullPath(Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IDMRea"));
     public static string PipeName => "IDMRea." + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(DataDirectory)))[..20];
     public static async Task<string> ReadLineAsync(StreamReader reader, int limit, CancellationToken token)

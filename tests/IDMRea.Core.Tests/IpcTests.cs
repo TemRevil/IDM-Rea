@@ -102,6 +102,17 @@ public sealed class IpcTests
         Assert.Null(await subscription.NextAsync(TimeSpan.FromSeconds(1)));
     }
 
+    /// <summary>A server that takes 21 s to answer is still within the probe's own 30 s limit, so the app gets the answer.</summary>
+    [Fact]
+    public async Task SlowServerProbeIsAnswered()
+    {
+        await using var server = new Fixture { HeaderDelay = 21_000 };
+        await using var host = new Host();
+        var probed = await host.Send(new("probe", server.Url, Version: 2));
+        Assert.True(probed.Ok, probed.Error);
+        Assert.Equal(server.BodySize, probed.Probe!.TotalBytes);
+    }
+
     [Fact]
     public async Task V1ListStillAnswered()
     {

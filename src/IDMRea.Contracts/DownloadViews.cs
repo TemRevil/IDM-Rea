@@ -24,7 +24,7 @@ public static class DownloadViews
             _ => Enum.TryParse<Category>(filter, out var category) && job.Category == category,
         };
         if (!inFilter) return false;
-        var text = search.Trim();
+        var text = Text.NormalizeDigits(search.Trim());
         return text.Length == 0
             || job.FileName.Contains(text, StringComparison.OrdinalIgnoreCase)
             || job.Url.Contains(text, StringComparison.OrdinalIgnoreCase);

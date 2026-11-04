@@ -24,7 +24,7 @@ public sealed class NullShell : IEngineShell
 /// <summary>Serves the engine pipe: one JSON request line, one JSON reply line; <c>subscribe</c> keeps the line open for pushes.</summary>
 public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
 {
-    private static readonly TimeSpan PushEvery = TimeSpan.FromMilliseconds(250), RequestTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan PushEvery = TimeSpan.FromMilliseconds(250), ReadTimeout = TimeSpan.FromSeconds(15);
     private readonly object gate = new();
     private readonly List<Subscriber> subscribers = [];
 
@@ -78,21 +78,21 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
         {
             using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true);
             using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
-            EngineRequest? request = null; EngineResponse response;
+            // Only reading the request is timed here: a link check has its own limit (Protocol.ProbeLimit), and an
+            // add that already happened must still be answered, or the app would offer to add it again.
+            string line;
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token))
+            { timeout.CancelAfter(ReadTimeout); line = await Protocol.ReadLineAsync(reader, 65536, timeout.Token); }
+            EngineRequest? request = null; EngineResponse response;
+            try
             {
-                timeout.CancelAfter(RequestTimeout);
-                try
-                {
-                    var line = await Protocol.ReadLineAsync(reader, 65536, timeout.Token);
-                    request = JsonSerializer.Deserialize<EngineRequest>(line, Protocol.Json) ?? throw new InvalidDataException("Missing request.");
-                    if (request.Version is not (1 or 2)) throw new InvalidDataException("Unsupported protocol version.");
-                    if (request.Command == "subscribe") { await SubscribeAsync(reader, writer, stopping.Token); return; }
-                    response = await HandleAsync(request, timeout.Token);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException and not EndOfStreamException) { response = new(false, Error: ErrorText(ex), Version: Protocol.CurrentVersion); }
-                await writer.WriteLineAsync(JsonSerializer.Serialize(response, Protocol.Json).AsMemory(), timeout.Token);
+                request = JsonSerializer.Deserialize<EngineRequest>(line, Protocol.Json) ?? throw new InvalidDataException("Missing request.");
+                if (request.Version is not (1 or 2)) throw new InvalidDataException("Unsupported protocol version.");
+                if (request.Command == "subscribe") { await SubscribeAsync(reader, writer, stopping.Token); return; }
+                response = await HandleAsync(request, stopping.Token);
             }
+            catch (Exception ex) when (!stopping.IsCancellationRequested) { response = new(false, Error: ErrorText(ex), Version: Protocol.CurrentVersion); }
+            await writer.WriteLineAsync(JsonSerializer.Serialize(response, Protocol.Json).AsMemory(), stopping.Token);
             if (request?.Command == "shutdown" && response.Ok) stopping.Cancel();
         }
         catch (Exception ex) when (ex is IOException or OperationCanceledException or ObjectDisposedException) { }
@@ -102,8 +102,8 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
     {
         var kind = RetryPolicy.Classify(ex);
         int? status = ex switch { TransferException { HttpStatus: int s } => s, HttpRequestException { StatusCode: { } code } => (int)code, _ => null };
-        // Network and disk causes get the plain-language text; our own validation messages are already plain.
-        return ex is TransferException or HttpRequestException || kind is ErrorKind.DiskFull or ErrorKind.AccessDenied ? Text.Describe(kind, status) : ex.Message;
+        // Network, timeout and disk causes get the plain-language text; our own validation messages are already plain.
+        return ex is TransferException or HttpRequestException || kind is ErrorKind.DiskFull or ErrorKind.AccessDenied or ErrorKind.Timeout ? Text.Describe(kind, status) : ex.Message;
     }
 
     private async Task<EngineResponse> HandleAsync(EngineRequest request, CancellationToken token)

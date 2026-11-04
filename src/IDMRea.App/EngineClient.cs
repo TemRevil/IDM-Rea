@@ -17,7 +17,9 @@ public sealed class EngineClient
 
     public async Task<EngineResponse> SendAsync(EngineRequest request, CancellationToken token = default)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        // probe and add check the link first, which the engine allows up to Protocol.ProbeLimit.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(request.Command is "probe" or "add" ? Protocol.ProbeLimit + TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(20));
         await using var pipe = await ConnectAsync(deadline.Token);
         using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true);
         using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };

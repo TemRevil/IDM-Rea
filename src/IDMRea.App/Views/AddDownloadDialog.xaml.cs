@@ -81,7 +81,7 @@ public sealed partial class AddDownloadDialog : ContentDialog
     /// <summary>Category, size and resumable line; the folder for that category; the "(1)" name if the file exists.</summary>
     private void Update()
     {
-        var name = FileNames.SafeName(NameBox.Text.Trim());
+        var name = FileNames.SafeName(Text.NormalizeDigits(NameBox.Text.Trim()));
         if (probe != null)
         {
             var category = Categories.From(name, probe.ContentType);

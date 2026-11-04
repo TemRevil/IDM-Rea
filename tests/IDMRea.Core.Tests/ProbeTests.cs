@@ -12,7 +12,7 @@ public sealed class ProbeTests
     {
         await using var server = new Fixture { BodySize = 3 * 1024 * 1024, Path = "/files/movie.mkv" };
         var probe = await Prober.ProbeAsync(Http, server.Url, default);
-        Assert.Equal(3 * 1024 * 1024, probe.TotalBytes); Assert.True(probe.AcceptsRanges); Assert.True(probe.Resumable);
+        Assert.Equal(3 * 1024 * 1024, probe.TotalBytes); Assert.True(probe.Resumable);
         Assert.Equal("\"v1\"", probe.ETag); Assert.Equal("movie.mkv", probe.FileName); Assert.Equal(Category.Video, probe.Category);
         Assert.Equal("bytes=0-0", Assert.Single(server.Ranges));
     }
@@ -22,7 +22,7 @@ public sealed class ProbeTests
     {
         await using var server = new Fixture { Mode = "ignore" };
         var probe = await Prober.ProbeAsync(Http, server.Url, default);
-        Assert.False(probe.AcceptsRanges); Assert.False(probe.Resumable); Assert.Equal(server.Body.Length, probe.TotalBytes);
+        Assert.False(probe.Resumable); Assert.Equal(server.Body.Length, probe.TotalBytes);
     }
 
     [Fact]

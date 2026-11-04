@@ -43,6 +43,9 @@ public sealed class ViewsTests
         Assert.True(DownloadViews.Matches(video, "all", "CDN.EXAMPLE"));
         Assert.False(DownloadViews.Matches(video, "all", "report"));
         Assert.True(DownloadViews.Matches(video, "Video", "  "));
+        // Typed on an Arabic keyboard: Arabic-Indic and Extended Arabic-Indic digits search as 0-9.
+        Assert.True(DownloadViews.Matches(video, "all", "v/١٢٣"));
+        Assert.True(DownloadViews.Matches(video, "all", "v/۱۲۳"));
     }
 
     [Fact]

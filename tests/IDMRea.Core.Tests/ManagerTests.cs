@@ -26,6 +26,33 @@ public sealed class ManagerTests
     private static bool Active(DownloadJob j) => j.Status is DownloadStatus.Queued or DownloadStatus.Downloading or DownloadStatus.Completed;
 
     [Fact]
+    public async Task TypedFileNameGetsAsciiDigits()
+    {
+        await using var server = new Fixture();
+        var root = Temp();
+        await using var manager = new DownloadManager(Path.Combine(root, "data"));
+        var job = await manager.AddAsync(server.Url, root, "تقرير ٢٠٢٦ ۳.pdf", startPaused: true);
+        Assert.Equal("تقرير 2026 3.pdf", job.FileName);
+    }
+
+    /// <summary>Windows warns before opening a downloaded program only when the file carries the internet zone mark.</summary>
+    [Fact]
+    public async Task FinishedFileIsMarkedAsFromTheInternet()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        await using var server = new Fixture();
+        var root = Temp();
+        await using var manager = new DownloadManager(Path.Combine(root, "data"));
+        var job = await manager.AddAsync(server.Url.Replace("http://", "http://user:secret@"), root);
+        var done = await Finished(manager, job.Id);
+        Assert.Equal(DownloadStatus.Completed, done.Status);
+        var mark = await File.ReadAllTextAsync(done.Destination + ":Zone.Identifier");
+        Assert.Contains("[ZoneTransfer]", mark); Assert.Contains("ZoneId=3", mark);
+        Assert.Contains("HostUrl=" + server.Url, mark); Assert.DoesNotContain("secret", mark);
+        Assert.Equal(server.Body, await File.ReadAllBytesAsync(done.Destination));
+    }
+
+    [Fact]
     public async Task AddUsesProbeNameCategoryAndFolder()
     {
         await using var server = new Fixture { Path = "/get" };

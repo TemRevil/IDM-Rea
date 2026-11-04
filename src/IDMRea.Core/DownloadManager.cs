@@ -6,9 +6,10 @@ using IDMRea.Contracts;
 namespace IDMRea.Core;
 
 /// <summary>Hooks a host or test can supply. <paramref name="Recycle"/> removes a finished file (default: delete);
-/// <paramref name="WriteFault"/> is a test seam called before each write with its file offset.</summary>
+/// <paramref name="WriteFault"/> is a test seam called before each write with its file offset.
+/// <paramref name="FreeSpace"/> replaces the drive's free bytes for a path (test seam).</summary>
 public sealed record ManagerOptions(Func<string, bool>? Recycle = null, TimeProvider? Time = null, HttpMessageHandler? Handler = null,
-    Func<long, Exception?>? WriteFault = null);
+    Func<long, Exception?>? WriteFault = null, Func<string, long>? FreeSpace = null);
 
 public sealed class DownloadManager : IAsyncDisposable
 {
@@ -109,7 +110,7 @@ public sealed class DownloadManager : IAsyncDisposable
         try
         {
             Directory.CreateDirectory(folder);
-            var name = SafeName(string.IsNullOrWhiteSpace(fileName) ? probe.FileName : fileName.Trim());
+            var name = SafeName(string.IsNullOrWhiteSpace(fileName) ? probe.FileName : Text.NormalizeDigits(fileName.Trim()));
             var destination = FileNames.UniquePath(folder, name, path => File.Exists(path) || Directory.Exists(path)
                 || Snapshot().Any(j => j.Destination.Equals(path, StringComparison.OrdinalIgnoreCase)));
             var id = Guid.NewGuid();
@@ -304,7 +305,21 @@ public sealed class DownloadManager : IAsyncDisposable
     }
 
     private static ProbeResult SavedProbe(DownloadJob job) => new(job.Url, job.ResolvedUrl ?? job.Url, job.FileName, job.TotalBytes,
-        true, job.ETag, job.LastModified, null, job.Category, true);
+        job.ETag, job.LastModified, null, job.Category, true);
+
+    /// <summary>
+    /// A redirect target can expire (signed links), so a resumed download asks its original URL again. The same file
+    /// gets the fresh target (every ranged response is still checked against the saved size and validator); no answer
+    /// keeps the saved target.
+    /// </summary>
+    private async Task<DownloadJob> RefreshLinkAsync(DownloadJob job, CancellationToken token)
+    {
+        if (job.ResolvedUrl == null || job.ResolvedUrl == job.Url) return job;
+        ProbeResult fresh;
+        try { fresh = await ProbeAsync(job.Url, token); }
+        catch (Exception) when (!token.IsCancellationRequested) { return job; }
+        return fresh.ResolvedUrl == job.ResolvedUrl ? job : Save(job with { ResolvedUrl = fresh.ResolvedUrl });
+    }
 
     private async Task TransferAsync(Guid id, CancellationTokenSource cancel, SpeedMeter meter)
     {
@@ -316,7 +331,8 @@ public sealed class DownloadManager : IAsyncDisposable
             var startBytes = job.ReceivedBytes;
             // New bytes mean the connection works again, so the retry count starts over.
             var context = new TransferContext(http, limiter, meter, () => Settings,
-                j => Save(j.ReceivedBytes > startBytes && j.Attempts != 0 ? j with { Attempts = 0 } : j), options.WriteFault);
+                j => Save(j.ReceivedBytes > startBytes && j.Attempts != 0 ? j with { Attempts = 0 } : j), options.WriteFault, options.FreeSpace);
+            if (job.ReceivedBytes > 0 || job.Parts != null) job = await RefreshLinkAsync(job, token);
             if (job.Parts is { Count: > 0 } && job.Resumable && job.TotalBytes > 0)
                 job = await MultiPartTransfer.RunAsync(job, SavedProbe(job), context, token);
             else if (job.ReceivedBytes == 0 && job.Parts == null)
@@ -330,6 +346,7 @@ public sealed class DownloadManager : IAsyncDisposable
             }
             else job = await SingleStreamTransfer.RunAsync(job, context, token);
             job = job with { CompletionSha256 = await FileHash.Sha256Async(job.PartialPath, token), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing };
+            ZoneMark.Write(job.PartialPath, job.Url); // the stream moves with the file
             Save(job); File.Move(job.PartialPath, job.Destination, false);
             Save(job with { Status = DownloadStatus.Completed, CompletedAt = time.GetUtcNow(), Attempts = 0, Error = null });
         }

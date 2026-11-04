@@ -11,22 +11,24 @@ public sealed class WindowsTests
     {
         const string key = @"Software\IDMRea-Tests\Run";
         var startup = new StartupRegistration(key, "IDM-Rea");
+        object? Value() { using var run = Registry.CurrentUser.OpenSubKey(key); return run?.GetValue("IDM-Rea"); }
         try
         {
-            Assert.False(startup.IsSet());
+            Assert.Null(Value());
             startup.Set(true, @"C:\Apps\IDM-Rea\engine\IDMRea.Engine.exe");
-            Assert.True(startup.IsSet());
-            using (var run = Registry.CurrentUser.OpenSubKey(key)!)
-                Assert.Equal(@"""C:\Apps\IDM-Rea\engine\IDMRea.Engine.exe"" --tray", run.GetValue("IDM-Rea"));
+            Assert.Equal(@"""C:\Apps\IDM-Rea\engine\IDMRea.Engine.exe"" --tray", Value());
             startup.Set(false, @"C:\Apps\IDM-Rea\engine\IDMRea.Engine.exe");
-            Assert.False(startup.IsSet());
+            Assert.Null(Value());
         }
         finally { Registry.CurrentUser.DeleteSubKeyTree(@"Software\IDMRea-Tests", false); }
     }
 
+    /// <summary>Each run leaves its test file in the real Recycle Bin, so it runs only where that is wanted (CI sets
+    /// IDMREA_TEST_RECYCLE=1).</summary>
     [Fact]
     public void RecycleBinSendRemovesFile()
     {
+        if (Environment.GetEnvironmentVariable("IDMREA_TEST_RECYCLE") != "1") return;
         var path = Path.Combine(Path.GetTempPath(), "idmrea-recycle-" + Guid.NewGuid() + ".txt");
         File.WriteAllText(path, "recycle me");
         Assert.True(RecycleBin.Send(path));
