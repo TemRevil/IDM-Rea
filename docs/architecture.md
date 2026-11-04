@@ -8,6 +8,8 @@
 - **Engine** (`engine\IDMRea.Engine.exe`): does all downloading.
   - The app starts it when needed. It keeps running after the window closes and shows the tray icon and notifications.
   - It holds `engine.lock` in the data folder, so a second engine exits with code 2.
+- **Native host** (`engine\IDMRea.BrowserHost.exe`): started by the browser for the extension. It speaks the browser's native messaging (4-byte length, then JSON) and relays to the engine pipe, starting the engine if needed. Messages: `hello` (version, take-over settings), `add` (link, name, referrer, cookies, user agent, SHA-256), `open` (shows the app).
+- **Extension** (`extension\`, Manifest V3, plain JavaScript, no build step). See below.
 - Closing the window either keeps downloading in the tray (default) or pauses everything and stops the engine (Settings).
 - The tray icon's right-click menu is built fresh each time it opens and follows Windows' light or dark mode. It shows how many files are downloading and how fast, then: Open IDM-Rea (also a double-click), Add from clipboard, Pause all and Resume all (each enabled only when it applies), a Speed limit submenu (No limit, 512 KB/s to 10 MB/s; a limit typed in Settings stays listed and ticked), Open downloads folder, Settings, and Quit.
 
@@ -21,6 +23,7 @@ Commands:
 - `pause`, `resume`, `cancel`, `retry`, `remove` (one id or several)
 - `pauseAll`, `resumeAll`
 - `getSettings`, `setSettings`
+- `registerBrowser` ("Add to browser")
 - `shutdown`
 - `subscribe`, which keeps the line open. The engine first sends the full list, then only changes: changed jobs, removed ids, per-job speeds, totals and settings.
 
@@ -46,6 +49,19 @@ Version-1 clients still get version-1 replies.
 7. **Retries.** Network errors, timeouts, `429` and `5xx` are retried up to the set number of times (default 5), after 2, 5, 15, 30 and 60 s, or after the server's `Retry-After` (at most 10 minutes). Other errors fail at once with a plain-language reason.
 8. **Speed.** One limit is shared by all downloads and changes apply at once. The speed shown is the average over the last 3 s.
 
+## Browser extension
+
+- `background.js` (service worker): checks links with a `Range: bytes=0-1023` request (4 at a time, cached 10 minutes), takes over browser downloads, guards tabs, and keeps the lists.
+  - **Take over:** the browser's download is paused, sent to IDM-Rea with the page's cookies, referrer and user agent, and erased only once IDM-Rea accepts it; otherwise it resumes in the browser. Files smaller than the Settings floor (1 MB) and private windows stay in the browser.
+  - **New tabs:** a tab opened by a page to another site is closed unless the page reported, in the last 1.5 s, a click on a link to that site or on a button. Ad networks are always closed. The page shows "Blocked a pop-up to example.com" with "Open it".
+  - **Redirects:** a tab sent to an ad server without being typed or clicked as a link to it goes back.
+  - **Lists**, downloaded at install and daily, matched with parent domains: URLhaus and the phishing filter (malware-filter), and EasyList's pop-up and ad servers. Malware, phishing and pop-up sites become blocking rules for pages and frames, which open `blocked.html` with the reason; "Continue anyway" allows the site in that tab until it closes.
+- `content/guard-main.js` (in the page's own world, before its scripts): `window.open` to another site works only during a click on a button or on a link to that site.
+- `content/page.js`: reports clicks; takes away click-catching layers (a fixed or absolute element over at least half the window that is invisible, or a link or frame to an ad server, is stopped at the press; an empty see-through one is removed only if the press opens a pop-up, since menus use those to close); finds candidate links and draws badges, the card and notices in a closed shadow root on a fixed layer.
+- `lib/`: the rules as pure functions (`verdict.js`, `links.js`, `lists.js`, `sites.js`, `guard.js`), tested with `node --test`.
+- A switch in the menu turns the click-trap guard off for one site. Nothing about the pages visited leaves the PC; only the lists are downloaded.
+- The extension's ID is fixed by the `key` in its manifest, and the host accepts only that ID.
+
 ## Start-up rule
 
 When the engine starts, downloads that were Downloading, Queued, Retrying, or paused by the engine itself (for example at shutdown) carry on by themselves. Downloads paused by the person stay paused.
@@ -61,6 +77,9 @@ Stored in `%LOCALAPPDATA%\IDMRea`; `IDMREA_DATA_DIRECTORY` overrides it (used by
 | `app-theme.txt` | the theme, read before the first frame so the window doesn't flash |
 | `icons\ring-RRGGBB.ico/png` | the icon drawn in each accent colour used |
 | `app-startup.log` | app start-up errors |
+| `browser\com.idmrea.host.json` | the native host manifest, written by "Add to browser" |
+
+"Add to browser" also points `HKCU\Software\{Google\Chrome, Microsoft\Edge, Chromium}\NativeMessagingHosts\com.idmrea.host` at that manifest, and writes `%LOCALAPPDATA%\IDMRea\browser-target.txt` with the data folder the host should use (the browser starts it without the app's environment; an `IDMREA_DATA_DIRECTORY` in the browser's own environment wins). Cookies sent with a browser download are stored with the job encrypted for the current Windows user (DPAPI).
 
 The database contains download URLs; never commit it. Nothing here protects against another process running as the same user.
 
