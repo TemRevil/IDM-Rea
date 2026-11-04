@@ -3,9 +3,10 @@ using IDMRea.BrowserHost;
 using IDMRea.Contracts;
 
 // Started by the browser for the extension's connection. It speaks to the extension on stdin/stdout and to the engine
-// over its pipe. The browser gives it none of the app's environment, so the data folder comes from "Add to browser".
+// over its pipe. The browser usually gives it none of the app's environment, so the data folder comes from "Add to browser".
 var home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IDMRea");
-if (HostHandler.TargetDataFolder(home) is { } target) Environment.SetEnvironmentVariable("IDMREA_DATA_DIRECTORY", target);
+if (HostHandler.ChooseDataFolder(home, Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY")) is { } folder)
+    Environment.SetEnvironmentVariable("IDMREA_DATA_DIRECTORY", folder);
 
 var client = new EngineClient();
 var engine = Path.Combine(AppContext.BaseDirectory, "IDMRea.Engine.exe");

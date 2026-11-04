@@ -20,6 +20,13 @@ public sealed class HostHandler(Func<EngineRequest, Task<EngineResponse>> send, 
         return target.Length == 0 ? null : target;
     }
 
+    /// <summary>
+    /// The data folder for this connection: one set in the browser's own environment (a test run, or a browser started
+    /// by IDM-Rea), else the one "Add to browser" chose; null means the default folder.
+    /// </summary>
+    public static string? ChooseDataFolder(string home, string? fromEnvironment) =>
+        string.IsNullOrWhiteSpace(fromEnvironment) ? TargetDataFolder(home) : fromEnvironment;
+
     public async Task<object> HandleAsync(JsonElement message)
     {
         int? id = message.TryGetProperty("id", out var value) && value.ValueKind == JsonValueKind.Number ? value.GetInt32() : null;

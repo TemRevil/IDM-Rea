@@ -50,4 +50,15 @@ public sealed class BrowserHostTests
         File.WriteAllText(Path.Combine(dir, "browser-target.txt"), @"  D:\Data\IDMRea  " + "\r\n");
         Assert.Equal(@"D:\Data\IDMRea", HostHandler.TargetDataFolder(dir));
     }
+
+    [Fact]
+    public void AFolderSetForTheBrowserItselfWinsOverTheRegistrationFile()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "idmrea-tests-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+        Assert.Null(HostHandler.ChooseDataFolder(dir, null));
+        File.WriteAllText(Path.Combine(dir, "browser-target.txt"), @"D:\Data\IDMRea");
+        Assert.Equal(@"D:\Data\IDMRea", HostHandler.ChooseDataFolder(dir, null));
+        Assert.Equal(@"D:\Data\IDMRea", HostHandler.ChooseDataFolder(dir, "  "));
+        Assert.Equal(@"E:\Check\data", HostHandler.ChooseDataFolder(dir, @"E:\Check\data"));
+    }
 }

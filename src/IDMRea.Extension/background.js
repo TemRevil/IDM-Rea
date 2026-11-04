@@ -256,16 +256,19 @@ chrome.webNavigation.onCommitted.addListener(async ({ tabId, frameId, url, trans
 chrome.downloads.onCreated.addListener(async (item) => {
   const url = item.finalUrl || item.url;
   if (!/^https?:/.test(url) || item.incognito || item.byExtensionId === chrome.runtime.id || item.state !== 'in_progress') return;
-  const settings = await hello();
-  if (!settings.ok || !settings.takeover) return;
-  if (item.totalBytes > 0 && item.totalBytes < settings.minBytes) return;
+  const declines = (s) => !s.ok || !s.takeover || (item.totalBytes > 0 && item.totalBytes < s.minBytes);
+  // Hold the browser's copy first: asking IDM-Rea takes a moment, and a fast download could finish meanwhile.
+  const known = helloCache && Date.now() - helloCache.at < 60_000 ? helloCache.reply : null;
+  if (known && declines(known)) return;
   try { await chrome.downloads.pause(item.id); } catch { return; } // already finished
+  if (declines(await hello())) { chrome.downloads.resume(item.id).catch(() => {}); return; }
   const fileName = (item.filename || '').split(/[\\/]/).pop() || null;
   const reply = await addToIdmRea({ url, fileName, referrer: item.referrer || null });
   if (reply.ok) {
     await chrome.downloads.cancel(item.id).catch(() => {});
     await chrome.downloads.erase({ id: item.id }).catch(() => {});
   } else {
+    console.warn('IDM-Rea did not take the download:', reply.error);
     chrome.downloads.resume(item.id).catch(() => {});
   }
 });
