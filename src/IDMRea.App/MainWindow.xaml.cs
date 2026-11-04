@@ -1,102 +1,194 @@
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Diagnostics;
+using System.Runtime.InteropServices;
+using IDMRea.App.Views;
 using IDMRea.Contracts;
+using Microsoft.UI;
+using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 namespace IDMRea.App;
-public partial class MainWindow : Window
+
+public sealed partial class MainWindow : Window
 {
-    private readonly EngineClient client = new();
-    private readonly ObservableCollection<DownloadRow> rows = [];
-    private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(750) };
-    private readonly SemaphoreSlim commands = new(1);
-    private bool busy, stopped, ready;
+    private static readonly string ThemeFile = Path.Combine(Protocol.DataDirectory, "app-theme.txt");
+    private readonly EngineSubscription subscription = new();
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly DispatcherTimer ticker = new() { Interval = TimeSpan.FromSeconds(1) };
+    private bool subscribed, quitting;
+    private LaunchArguments? pending;
+
+    public static MainWindow Instance { get; private set; } = null!;
+    public AppState State { get; } = new();
+    public EngineClient Client { get; } = new();
+    public bool EngineConnected => subscription.Connected;
+    public event Action? EngineStateChanged;
+
     public MainWindow()
     {
-        InitializeComponent(); AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 800));
-        FolderBox.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-        JobsList.ItemsSource = rows; timer.Tick += async (_, _) => await RefreshAsync();
-        Closed += (_, _) => timer.Stop();
-        _ = InitializeAsync();
+        Instance = this;
+        InitializeComponent();
+        ApplyTheme(ReadCachedTheme());
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
+        var assets = Path.Combine(AppContext.BaseDirectory, "Assets");
+        AppWindow.SetIcon(Path.Combine(assets, "AppIcon.ico"));
+        TitleIcon.ImageSource = new BitmapImage(new Uri(Path.Combine(assets, "AppIcon.png")));
+        if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
+        else Root.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 760));
+        if (AppWindow.Presenter is OverlappedPresenter presenter) { presenter.PreferredMinimumWidth = 720; presenter.PreferredMinimumHeight = 480; }
+
+        State.PropertyChanged += (_, _) => UpdateShell();
+        State.SettingsChanged += s => ApplyTheme(s.Theme, remember: true);
+        subscription.Received += update => DispatcherQueue.TryEnqueue(() => State.Apply(update));
+        subscription.ConnectionChanged += _ => DispatcherQueue.TryEnqueue(UpdateEngineState);
+        ticker.Tick += (_, _) => { foreach (var row in State.All) if (row.Status == DownloadStatus.Retrying) row.Refresh(); };
+        AppWindow.Changed += AppWindow_Changed;
+        AppWindow.Closing += AppWindow_Closing;
+        Closed += (_, _) => { lifetime.Cancel(); subscription.Stop(); };
+
+        ContentFrame.Navigate(typeof(DownloadsPage));
+        UpdateShell();
+        _ = ConnectAsync();
     }
-    private async Task InitializeAsync()
+
+    private async Task ConnectAsync()
     {
+        try { await Client.EnsureStartedAsync(); }
+        catch (Exception ex) when (ex is IOException or FileNotFoundException or OperationCanceledException or TimeoutException)
+        {
+            EngineText.Text = "Engine unavailable: " + ex.Message;
+        }
+        StartSubscription();
+    }
+
+    private void StartSubscription()
+    {
+        if (subscribed || lifetime.IsCancellationRequested) return;
+        subscribed = true;
+        _ = subscription.StartAsync(lifetime.Token);
+    }
+
+    private void StopSubscription() { subscribed = false; subscription.Stop(); }
+
+    /// <summary>Nothing is pushed to a minimised window; the full list comes again on restore.</summary>
+    private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (!args.DidPresenterChange && !args.DidSizeChange || sender.Presenter is not OverlappedPresenter presenter) return;
+        if (presenter.State == OverlappedPresenterState.Minimized) StopSubscription(); else StartSubscription();
+    }
+
+    private async void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (quitting || State.Settings.OnClose != CloseBehavior.PauseAllAndQuit || !EngineConnected) return;
+        args.Cancel = true; quitting = true;
         try
         {
-            await client.EnsureStartedAsync();
-            ready = await ExecuteAsync(new("list"));
-            AddButton.IsEnabled = StopButton.IsEnabled = ready;
-            if (ready) timer.Start();
+            await Client.SendAsync(new("pauseAll"));
+            await Client.SendAsync(new("shutdown"));
         }
-        catch (Exception ex) { ShowError(ex.Message); StatusLabel.Text = "Engine unavailable"; }
+        catch (Exception ex) when (ex is IOException or OperationCanceledException or TimeoutException) { }
+        Close();
     }
-    private void ShowError(string error) { ErrorBar.Message = error; ErrorBar.IsOpen = true; }
-    private async Task<bool> ExecuteAsync(EngineRequest request)
+
+    private void UpdateShell()
     {
-        await commands.WaitAsync();
-        try
+        foreach (var item in Nav.MenuItems.OfType<NavigationViewItem>())
         {
-            var result = await client.SendAsync(request);
-            if (!result.Ok) { ShowError(result.Error ?? "Engine error."); return false; }
-            Apply(result.Jobs ?? []);
-            if (request.Command != "list") ErrorBar.IsOpen = false;
-            return true;
+            var count = item.Tag is string tag ? State.Counts.GetValueOrDefault(tag) : 0;
+            item.InfoBadge ??= (string)item.Tag == DownloadViews.Failed
+                ? new InfoBadge { Style = (Style)Application.Current.Resources["CriticalValueInfoBadgeStyle"] }
+                : new InfoBadge();
+            item.InfoBadge.Value = count;
+            item.InfoBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
-        catch (Exception ex) { ShowError(ex.Message); return false; }
-        finally { commands.Release(); }
+        var totals = State.Totals;
+        StatusText.Text = totals.Active > 0 ? $"{totals.Active} downloading - {Text.Speed(totals.BytesPerSecond)}" : "Ready";
+        if (State.All.Any(r => r.Status == DownloadStatus.Retrying)) ticker.Start(); else ticker.Stop();
+        if (pending is { } args && State.HasSettings) { pending = null; Handle(args); }
     }
-    private async Task RefreshAsync() { if (busy || stopped) return; busy = true; try { await ExecuteAsync(new("list")); } finally { busy = false; } }
-    private void Apply(IReadOnlyList<DownloadJob> jobs)
+
+    private void UpdateEngineState()
     {
-        foreach (var job in jobs) { var row = rows.FirstOrDefault(r => r.Id == job.Id); if (row == null) rows.Add(new(job)); else row.Update(job); }
-        EmptyState.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        CountLabel.Text = $"{jobs.Count} file{(jobs.Count == 1 ? "" : "s")}";
-        var active = jobs.Count(j => j.Status is DownloadStatus.Downloading or DownloadStatus.Queued);
-        StatusLabel.Text = active > 0 ? $"{active} active · Downloads continue when you close this window" : "Ready · Up to 3 simultaneous downloads";
+        var on = subscription.Connected;
+        EngineText.Text = on ? "Engine running" : "Connecting to engine";
+        EngineDot.Fill = on ? new SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColor"]) : (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
+        EngineStateChanged?.Invoke();
     }
-    private async void Add_Click(object sender, RoutedEventArgs e)
+
+    public void ApplyTheme(AppTheme theme, bool remember = false)
     {
-        if (stopped || !ready || !AddButton.IsEnabled) return;
-        AddButton.IsEnabled = false;
-        try
-        {
-            if (await ExecuteAsync(new("add", UrlBox.Text.Trim(), FolderBox.Text.Trim()))) UrlBox.Text = "";
-        }
-        finally { AddButton.IsEnabled = !stopped && ready; }
+        Root.RequestedTheme = theme switch { AppTheme.Light => ElementTheme.Light, AppTheme.Dark => ElementTheme.Dark, _ => ElementTheme.Default };
+        var dark = Root.ActualTheme == ElementTheme.Dark || theme == AppTheme.Dark
+            || (theme == AppTheme.System && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+        var bar = AppWindow.TitleBar;
+        bar.ButtonBackgroundColor = bar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        bar.ButtonForegroundColor = dark ? Colors.White : Colors.Black;
+        bar.ButtonInactiveForegroundColor = dark ? Windows.UI.Color.FromArgb(0xFF, 0x9A, 0x9A, 0x9A) : Windows.UI.Color.FromArgb(0xFF, 0x70, 0x70, 0x70);
+        bar.ButtonHoverBackgroundColor = dark ? Windows.UI.Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF) : Windows.UI.Color.FromArgb(0x10, 0, 0, 0);
+        bar.ButtonHoverForegroundColor = bar.ButtonForegroundColor;
+        if (!remember) return;
+        try { if (ReadCachedTheme() != theme) { Directory.CreateDirectory(Protocol.DataDirectory); File.WriteAllText(ThemeFile, theme.ToString()); } }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
-    private void UrlBox_KeyDown(object sender, KeyRoutedEventArgs e)
-    { if (e.Key == Windows.System.VirtualKey.Enter) Add_Click(sender, e); }
-    private async void Pause_Click(object sender, RoutedEventArgs e) { if (!stopped) await ExecuteAsync(new("pause", Id: (Guid)((Button)sender).Tag)); }
-    private async void Resume_Click(object sender, RoutedEventArgs e) { if (!stopped) await ExecuteAsync(new("resume", Id: (Guid)((Button)sender).Tag)); }
-    private async void Cancel_Click(object sender, RoutedEventArgs e) { if (!stopped) await ExecuteAsync(new("cancel", Id: (Guid)((Button)sender).Tag)); }
-    private void Open_Click(object sender, RoutedEventArgs e) { try { Directory.CreateDirectory(FolderBox.Text); Process.Start(new ProcessStartInfo(FolderBox.Text) { UseShellExecute = true }); } catch (Exception ex) { ShowError(ex.Message); } }
-    private async void Stop_Click(object sender, RoutedEventArgs e)
+
+    private static AppTheme ReadCachedTheme()
     {
-        StopButton.IsEnabled = false;
-        if (await ExecuteAsync(new("shutdown")))
-        {
-            timer.Stop(); stopped = true; ready = false;
-            AddButton.IsEnabled = false; JobsList.IsEnabled = false;
-            StatusLabel.Text = "Engine stopping · Reopen the app to resume your saved downloads.";
-        }
-        else StopButton.IsEnabled = true;
+        try { return File.Exists(ThemeFile) && Enum.TryParse<AppTheme>(File.ReadAllText(ThemeFile).Trim(), out var theme) ? theme : AppTheme.System; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return AppTheme.System; }
     }
-}
-[Microsoft.UI.Xaml.Data.Bindable]
-public sealed class DownloadRow(DownloadJob job) : INotifyPropertyChanged
-{
-    private DownloadJob job = job;
-    public Guid Id => job.Id;
-    public string Name => Path.GetFileName(job.Destination);
-    public string Detail => $"{job.Status}  ·  {job.ReceivedBytes / 1048576.0:F1} / {(job.TotalBytes is long total ? (total / 1048576.0).ToString("F1") : "?")} MB";
-    public double Progress => job.TotalBytes > 0 ? Math.Clamp(100.0 * job.ReceivedBytes / job.TotalBytes.Value, 0, 100) : job.Status == DownloadStatus.Completed ? 100 : 0;
-    public bool Indeterminate => job.TotalBytes is null && job.Status == DownloadStatus.Downloading;
-    public bool CanPause => job.Status is DownloadStatus.Queued or DownloadStatus.Downloading;
-    public bool CanResume => job.Status is DownloadStatus.Paused or DownloadStatus.Failed;
-    public bool CanCancel => job.Status is not (DownloadStatus.Completed or DownloadStatus.Cancelled or DownloadStatus.Finalizing);
-    public string Error => job.Error ?? "";
-    public event PropertyChangedEventHandler? PropertyChanged;
-    public void Update(DownloadJob value) { job = value; PropertyChanged?.Invoke(this, new(null)); }
+
+    /// <summary>A second launch: bring this window forward, then do what it asked.</summary>
+    public void Reactivate(LaunchArguments args)
+    {
+        if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter) presenter.Restore();
+        Activate();
+        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        Handle(args);
+    }
+
+    public void Handle(LaunchArguments args)
+    {
+        if (args.Job is null && !args.AddFromClipboard) return;
+        if (!State.HasSettings) { pending = args; return; }
+        if (args.Job is Guid id) ShowJob(id);
+    }
+
+    public void ShowJob(Guid id)
+    {
+        SelectNav(DownloadViews.All);
+        (ContentFrame.Content as DownloadsPage)?.Select(id);
+    }
+
+    private void SelectNav(string tag)
+    {
+        var item = Nav.MenuItems.Concat(Nav.FooterMenuItems).OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == tag);
+        if (item != null) Nav.SelectedItem = item;
+    }
+
+    private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    {
+        if (args.SelectedItem is not NavigationViewItem { Tag: string tag }) return;
+        if (tag == "settings") return;
+        State.Filter = tag;
+        if (ContentFrame.Content is not DownloadsPage) ContentFrame.Navigate(typeof(DownloadsPage));
+    }
+
+    private void AppTitleBar_PaneToggleRequested(TitleBar sender, object args) => Nav.IsPaneOpen = !Nav.IsPaneOpen;
+
+    private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput) State.Search = sender.Text;
+    }
+
+    private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        SearchBox.Focus(FocusState.Keyboard); args.Handled = true;
+    }
+
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);
 }

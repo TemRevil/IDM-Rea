@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page x:Class="IDMRea.App.Views.DownloadsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:app="using:IDMRea.App" Background="Transparent">
+    <ListView x:Name="List" Padding="16,12" SelectionMode="Extended">
+        <ListView.ItemTemplate>
+            <DataTemplate x:DataType="app:DownloadRow">
+                <Grid Padding="4,10" ColumnSpacing="14" RowSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="{x:Bind CategoryGlyph, Mode=OneWay}" FontSize="18" VerticalAlignment="Top" Margin="0,2,0,0" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <StackPanel Grid.Column="1" Spacing="4">
+                        <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                        <TextBlock Text="{x:Bind StatusLine, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <ProgressBar Value="{x:Bind Progress, Mode=OneWay}" IsIndeterminate="{x:Bind Indeterminate, Mode=OneWay}" Maximum="100" Visibility="{x:Bind ShowProgress, Mode=OneWay}"/>
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+        </ListView.ItemTemplate>
+    </ListView>
+</Page>

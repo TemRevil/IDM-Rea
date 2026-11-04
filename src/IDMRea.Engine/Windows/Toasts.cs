@@ -18,7 +18,7 @@ public sealed class Toasts
         using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\AppUserModelId\" + AppId, writable: true))
         {
             key.SetValue("DisplayName", "IDM-Rea");
-            var icon = Path.Combine(AppLauncher.AppFolder, "AppIcon.png");
+            var icon = Path.Combine(AppLauncher.AppFolder, "Assets", "AppIcon.png");
             if (File.Exists(icon)) key.SetValue("IconUri", icon); else key.DeleteValue("IconUri", false);
         }
         Native.SetCurrentProcessExplicitAppUserModelID(AppId);
