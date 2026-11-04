@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "IDM-Rea",
   "version": "1.0.0",
-  "description": "Shows the real files on a page, stops click traps and bad sites, and downloads with IDM-Rea.",
+  "description": "Shows the real files on a page, downloads the video a page plays, stops click traps and bad sites.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxg8XbAETKaQwUsQCpGpewAv3K/Yk14v4/N7JE1i5wKyJSKo+EZP8flocqZTNlUK1LuQt9T9tUK92dEznhgmSgxICUel8L/JMFV0xIC0Hyrc4Rv92SWi2womsxVEra4oljTw1ffnjFaEdT1k5IQOmAEYpF8qoZX7E6PFKfwmfev3tvLtA+hTAurjS8gJi3SKDwoQoEDRIRvmz7cS5MmMksuo2HgLLX4PVo8wctYMMwC3xEkolpKb89JHqxr0pDcVP0iFOenQ/cWva3ccsMdrdO2oLT18kG3Lk6LrtZGjq+3HwFrLOIhSYD6r4tV8xaybC4Yp405GcjZLPGsY69CugmwIDAQAB",
   "minimum_chrome_version": "116",
   "icons": {
@@ -30,6 +30,7 @@
     "storage",
     "tabs",
     "webNavigation",
+    "webRequest",
     "declarativeNetRequest",
     "alarms"
   ],

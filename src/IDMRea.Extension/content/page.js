@@ -9,9 +9,9 @@
   const WATCH_MS = 1500;
   const send = (message) => chrome.runtime.sendMessage(message).catch(() => null);
   const lib = (name) => import(chrome.runtime.getURL(`lib/${name}.js`));
-  const loaded = Promise.all([lib('links'), lib('guard'), lib('sites')]);
-  let links = null, guard = null, sites = null;
-  loaded.then(([l, g, s]) => { links = l; guard = g; sites = s; });
+  const loaded = Promise.all([lib('links'), lib('guard'), lib('sites'), lib('video')]);
+  let links = null, guard = null, sites = null, video = null;
+  loaded.then(([l, g, s, v]) => { links = l; guard = g; sites = s; video = v; });
 
   let guardOn = true;
   let layer = null; // the shadow root, once something is drawn
@@ -171,7 +171,7 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message?.type === 'blocked-popup') noticePopup(message.url);
-    if (message?.type === 'state') { reply({ files: filesFound(), url: location.href }); return false; }
+    if (message?.type === 'state') { reply({ files: filesFound(), url: location.href, videos: playersShown(), frames: playerFrames() }); return false; }
     return false;
   });
 
@@ -284,6 +284,125 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scanSoon, { once: true });
   else scanSoon();
 
+  // ---------- Videos ----------
+
+  const BUTTON_HIDE_MS = 1500;
+  const TOOLS_POLL_MS = 1500;
+
+  function factsOf(v) {
+    const r = v.getBoundingClientRect();
+    const style = getComputedStyle(v);
+    return { width: r.width, height: r.height, opacity: opacityOf(v), hidden: style.visibility === 'hidden' || style.display === 'none',
+      loop: v.loop, muted: v.muted, controls: v.controls };
+  }
+
+  const players = () => (video ? [...document.querySelectorAll('video')].filter((v) => v.isConnected && video.qualifies(factsOf(v))) : []);
+  const playersShown = () => players().length;
+  /** Frames big enough to hold a player (an embedded video): their addresses help find the video. */
+  const playerFrames = () => [...document.querySelectorAll('iframe[src]')]
+    .filter((f) => { const r = f.getBoundingClientRect(); return r.width >= 200 && r.height >= 112; }).map((f) => f.src).slice(0, 10);
+
+  let videoButton = null, videoFor = null, buttonTimer = 0, videoCard = null;
+
+  function showVideoButton(v) {
+    clearTimeout(buttonTimer);
+    if (!videoButton) {
+      videoButton = el('button', 'video-button', 'Download video');
+      videoButton.addEventListener('click', () => openVideoCard());
+      videoButton.addEventListener('mouseenter', () => clearTimeout(buttonTimer));
+      videoButton.addEventListener('mouseleave', hideVideoButtonSoon);
+      ensureLayer().append(videoButton);
+    }
+    videoFor = v;
+    placeVideoButton();
+    requestAnimationFrame(() => videoButton?.classList.add('shown'));
+  }
+
+  function placeVideoButton() {
+    if (!videoButton || !videoFor) return;
+    const r = videoFor.getBoundingClientRect();
+    const x = Math.max(8, Math.min(r.right, innerWidth) - videoButton.offsetWidth - 12);
+    const y = Math.max(8, r.top + 12);
+    videoButton.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  }
+
+  function hideVideoButtonSoon() {
+    clearTimeout(buttonTimer);
+    buttonTimer = setTimeout(() => { if (!videoCard) videoButton?.classList.remove('shown'); }, BUTTON_HIDE_MS);
+  }
+
+  /** Players are found under the pointer by position, since the page's own controls usually cover the video element. */
+  let pointerFrame = 0;
+  addEventListener('pointermove', (event) => {
+    if (pointerFrame || !video) return;
+    pointerFrame = requestAnimationFrame(() => {
+      pointerFrame = 0;
+      const over = players().find((v) => {
+        const r = v.getBoundingClientRect();
+        return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+      });
+      if (over) showVideoButton(over);
+      else if (videoButton?.classList.contains('shown') && !ours(event)) hideVideoButtonSoon();
+    });
+  }, { capture: true, passive: true });
+  // A video that starts playing shows the button for a moment too.
+  addEventListener('play', (event) => {
+    const v = event.target;
+    if (v instanceof HTMLVideoElement && video?.qualifies(factsOf(v))) { showVideoButton(v); hideVideoButtonSoon(); }
+  }, true);
+  addEventListener('scroll', () => { if (videoButton?.classList.contains('shown')) placeVideoButton(); }, { capture: true, passive: true });
+
+  function closeVideoCard() {
+    videoCard?.remove();
+    videoCard = null;
+    hideVideoButtonSoon();
+  }
+
+  async function openVideoCard() {
+    if (videoCard) { closeVideoCard(); return; }
+    videoCard = el('div', 'card video-card');
+    const close = el('button', 'close', 'Close');
+    close.addEventListener('click', closeVideoCard);
+    const body = el('div', '');
+    videoCard.append(body, close);
+    ensureLayer().append(videoCard);
+    const r = videoButton.getBoundingClientRect();
+    videoCard.style.transform = `translate(${Math.round(Math.min(Math.max(8, r.right - 300), innerWidth - 308))}px, ${Math.round(r.bottom + 8)}px)`;
+    requestAnimationFrame(() => videoCard?.classList.add('shown'));
+    const card = videoCard;
+    const say = (...nodes) => { if (videoCard === card) body.replaceChildren(...nodes); };
+    say(el('div', 'meta', 'Finding the qualities'));
+    while (videoCard === card) {
+      const reply = await send({ type: 'video-probe', url: location.href, frames: playerFrames() });
+      if (videoCard !== card) return;
+      if (!reply?.ok) { say(el('div', 'bad-line', reply?.error || 'IDM-Rea did not answer.')); return; }
+      if (reply.tools?.error) { say(el('div', 'bad-line', `IDM-Rea couldn't set up its video tools: ${reply.tools.error}`)); return; }
+      if (reply.tools && !reply.tools.ready) {
+        say(el('div', 'name', 'Getting ready for videos'), el('div', 'meta', `IDM-Rea is downloading its video tools, once. ${reply.tools.percent || 0}%`));
+        await new Promise((done) => setTimeout(done, TOOLS_POLL_MS));
+        continue;
+      }
+      showChoices(say, reply.video);
+      return;
+    }
+  }
+
+  function showChoices(say, info) {
+    const list = el('div', 'choices');
+    for (const row of video.choiceRows(info.choices)) {
+      const pick = el('button', 'choice');
+      pick.append(el('span', 'quality', row.quality), el('span', 'detail', row.detail));
+      pick.addEventListener('click', async () => {
+        for (const b of list.querySelectorAll('button')) b.disabled = true;
+        const reply = await send({ type: 'video-add', url: info.pageUrl, choice: row.id, pageUrl: location.href });
+        toast(reply?.ok ? `Sent ${info.title} to IDM-Rea.` : reply?.error || 'IDM-Rea did not answer.');
+        closeVideoCard();
+      });
+      list.append(pick);
+    }
+    say(el('div', 'name', info.title), list);
+  }
+
   // ---------- Drawing ----------
 
   const STYLE = `
@@ -313,7 +432,18 @@
       background: #232323; box-shadow: 0 6px 20px rgba(0,0,0,.3); font-size: 12.5px; line-height: 1.4; opacity: 0; transform: translateY(6px);
       transition: opacity 280ms ease, transform 280ms ease; }
     .toast.shown { opacity: 1; transform: none; }
-    @media (prefers-reduced-motion: reduce) { .card, .toast { transition: none; } }
+    .video-button { position: fixed; left: 0; top: 0; padding: 7px 12px; border-radius: 6px; background: rgba(30,30,30,.88); color: #F2F2F0;
+      font: 500 12px/1 "Inter Tight", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; pointer-events: auto; opacity: 0;
+      transition: opacity 240ms ease; box-shadow: 0 2px 10px rgba(0,0,0,.3); }
+    .video-button.shown { opacity: 1; }
+    .video-button:not(.shown) { pointer-events: none; }
+    .video-card { padding-bottom: 10px; }
+    .choices { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+    .choice { display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: #2E2E2E; padding: 8px 10px; }
+    .choice:hover:not(:disabled) { background: #3A3A3A; }
+    .choice .detail { color: #B8B8B4; font-variant-numeric: tabular-nums; }
+    .close { margin-top: 10px; background: none; padding: 0; color: #B8B8B4; text-decoration: underline; text-underline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { .card, .toast, .video-button { transition: none; } }
   `;
 
   function ensureLayer() {

@@ -33,6 +33,10 @@ h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .04em; 
 .file .warning { grid-column: 2 / 4; color: var(--warn); font-size: 12px; }
 #files { max-height: 260px; overflow-y: auto; }
 .empty { margin: 0; color: var(--muted); }
+.video-title { font-weight: 600; overflow-wrap: anywhere; margin-bottom: 6px; }
+#video-choices { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.choice { display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left; padding: 7px 10px; }
+.choice .size { color: var(--muted); font-variant-numeric: tabular-nums; }
 .row { display: flex; gap: 8px; margin-top: 10px; }
 button { font: inherit; font-weight: 500; border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; background: var(--button); color: var(--text); }
 button.primary { background: var(--primary); color: var(--primary-text); }

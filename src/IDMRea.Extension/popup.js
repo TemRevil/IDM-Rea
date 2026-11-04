@@ -3,6 +3,8 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, className, text) => { const e = document.createElement(tag); if (className) e.className = className; if (text != null) e.textContent = text; return e; };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+import { choiceRows } from './lib/video.js';
+
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 const web = /^https?:/.test(tab?.url || '');
 
@@ -22,9 +24,10 @@ if (!connected) {
 
 // ---------- Files ----------
 
-let files = [];
+let files = [], page = null;
 if (web) {
-  try { files = (await chrome.tabs.sendMessage(tab.id, { type: 'state' }))?.files || []; } catch { files = []; }
+  try { page = await chrome.tabs.sendMessage(tab.id, { type: 'state' }); } catch { page = null; }
+  files = page?.files || [];
 }
 const boxes = [];
 if (!web) {
@@ -69,6 +72,54 @@ $('download').addEventListener('click', async () => {
   const reply = await chrome.runtime.sendMessage({ type: 'download-many', items, referrer: tab.url });
   $('download').textContent = reply?.ok ? `Sent ${plural(reply.added, 'file', 'files')} to IDM-Rea` : reply?.error || 'IDM-Rea did not answer.';
 });
+
+// ---------- Video ----------
+
+const TOOLS_POLL_MS = 1500;
+
+async function lookForVideo() {
+  $('video-look').hidden = true;
+  $('video-status').hidden = false;
+  $('video-status').textContent = 'Looking for a video';
+  while (true) {
+    const reply = await chrome.runtime.sendMessage({ type: 'video-probe', tabId: tab.id, url: tab.url, frames: page?.frames || [] });
+    if (!reply?.ok) { $('video-status').textContent = reply?.error || 'IDM-Rea did not answer.'; return; }
+    if (reply.tools?.error) { $('video-status').textContent = `IDM-Rea couldn't set up its video tools: ${reply.tools.error}`; return; }
+    if (reply.tools && !reply.tools.ready) {
+      $('video-status').textContent = `Getting ready for videos: IDM-Rea is downloading its video tools, once. ${reply.tools.percent || 0}%`;
+      await new Promise((done) => setTimeout(done, TOOLS_POLL_MS));
+      continue;
+    }
+    showVideo(reply.video);
+    return;
+  }
+}
+
+function showVideo(info) {
+  $('video-status').hidden = true;
+  $('video').hidden = false;
+  $('video-title').textContent = info.title;
+  for (const row of choiceRows(info.choices)) {
+    const pick = el('button', 'choice');
+    pick.append(el('span', 'quality', row.quality), el('span', 'size', row.detail));
+    pick.addEventListener('click', async () => {
+      for (const b of $('video-choices').querySelectorAll('button')) b.disabled = true;
+      const reply = await chrome.runtime.sendMessage({ type: 'video-add', url: info.pageUrl, choice: row.id, pageUrl: tab.url });
+      $('video-status').hidden = false;
+      $('video-status').textContent = reply?.ok ? `Sent ${row.quality} to IDM-Rea.` : reply?.error || 'IDM-Rea did not answer.';
+    });
+    $('video-choices').append(pick);
+  }
+}
+
+if (web && connected) {
+  $('video-section').hidden = false;
+  const notes = await chrome.runtime.sendMessage({ type: 'video-notes', tabId: tab.id });
+  // Asking yt-dlp takes a few seconds, so it runs by itself only where the page shows a player or loaded video.
+  if (page?.videos || page?.frames?.length || notes?.count) lookForVideo();
+  else { $('video-look').hidden = false; $('video-status').hidden = true; }
+  $('video-look').addEventListener('click', lookForVideo);
+}
 
 // ---------- Protection ----------
 

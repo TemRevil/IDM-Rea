@@ -3,6 +3,7 @@ import { LISTS, parse, DomainSet } from './lib/lists.js';
 import { classify } from './lib/verdict.js';
 import { hostOf, siteOf } from './lib/sites.js';
 import { newTabVerdict, redirectVerdict } from './lib/guard.js';
+import { isMediaRequest, mediaNotes } from './lib/video.js';
 
 const HOST = 'com.idmrea.host';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -121,6 +122,30 @@ async function addToIdmRea({ url, fileName = null, referrer = null, sha256 = nul
   });
 }
 
+// ---------- Videos ----------
+
+// The media each tab loaded (HLS and DASH lists, video files), newest first: a page yt-dlp doesn't know is tried
+// through these. Observed only; nothing is changed or held.
+const media = new Map(); // tabId -> [url]
+
+chrome.webRequest.onResponseStarted.addListener(({ tabId, url, type, responseHeaders }) => {
+  if (tabId < 0) return;
+  const contentType = responseHeaders?.find((h) => h.name.toLowerCase() === 'content-type')?.value || '';
+  if (isMediaRequest({ url, type, contentType })) media.set(tabId, mediaNotes(media.get(tabId) || [], url));
+}, { urls: ['http://*/*', 'https://*/*'], types: ['media', 'xmlhttprequest', 'other'] }, ['responseHeaders']);
+
+chrome.webNavigation.onCommitted.addListener(({ tabId, frameId }) => { if (frameId === 0) media.delete(tabId); });
+
+/** What the page plays, or how far IDM-Rea got setting up its video tools. */
+async function probeVideo(tabId, url, frames = []) {
+  const seen = [...(media.get(tabId) || []), ...frames.filter((f) => /^https?:/.test(f))];
+  return native({ type: 'probeVideo', url, referrer: url, cookies: await cookiesFor(url), userAgent: navigator.userAgent, media: seen });
+}
+
+async function addVideo({ url, choice, pageUrl }) {
+  return native({ type: 'addVideo', url, choice, referrer: pageUrl || url, cookies: await cookiesFor(url), userAgent: navigator.userAgent });
+}
+
 // ---------- Probes ----------
 
 const probes = new Map(); // url -> { at, promise }
@@ -205,6 +230,7 @@ async function count(tabId, what) {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   clicks.delete(tabId);
+  media.delete(tabId);
   chrome.storage.session.remove(`stats:${tabId}`);
 });
 
@@ -326,6 +352,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     case 'update-lists':
       updateLists().then((ok) => reply({ ok, updated: listsUpdated }));
       return true;
+    case 'video-probe':
+      probeVideo(message.tabId ?? tabId, message.url, message.frames || []).then(reply);
+      return true;
+    case 'video-add':
+      addVideo(message).then(reply);
+      return true;
+    case 'video-notes':
+      reply({ count: (media.get(message.tabId ?? tabId) || []).length });
+      return false;
     case 'open-app':
       native({ type: 'open' }).then(reply);
       return true;
