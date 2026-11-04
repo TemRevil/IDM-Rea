@@ -15,7 +15,7 @@ public sealed class DownloadRow(DownloadJob job) : INotifyPropertyChanged
     public long Speed => speed;
     public string StatusLine => Text.StatusLine(Job, speed, DateTimeOffset.Now, retryAttempts);
     public double Progress => Job.TotalBytes > 0 ? Math.Clamp(100.0 * Job.ReceivedBytes / Job.TotalBytes.Value, 0, 100) : Job.Status == DownloadStatus.Completed ? 100 : 0;
-    public bool Indeterminate => Job.Status == DownloadStatus.Finalizing || (Job.TotalBytes is null && Job.Status == DownloadStatus.Downloading);
+    public bool Indeterminate => Job.Status == DownloadStatus.Finalizing || (Job.Status == DownloadStatus.Downloading && (Job.TotalBytes is null || Job.Video?.Stage == VideoStage.Joining));
     public bool CanPause => Job.Status is DownloadStatus.Queued or DownloadStatus.Downloading or DownloadStatus.Retrying;
     public bool CanResume => Job.Status is DownloadStatus.Paused or DownloadStatus.Failed;
     public bool CanRetry => Job.Status is DownloadStatus.Failed or DownloadStatus.Cancelled or DownloadStatus.Retrying;

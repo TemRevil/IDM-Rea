@@ -106,6 +106,19 @@ public sealed class VideoEngineTests
     }
 
     [Fact]
+    public async Task SettingUpFromSettingsDoesNotWaitForTheDownload()
+    {
+        var releases = new Slow();
+        await using var host = new Host(new Runner(""), releases, ready: false);
+        var started = DateTime.UtcNow;
+        var reply = await host.Send(new("updateVideoTools", Version: Protocol.CurrentVersion));
+        Assert.True(reply.Ok, reply.Error);
+        Assert.True(reply.Tools!.Installing);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5));
+        Assert.Equal(1, releases.Calls);
+    }
+
+    [Fact]
     public async Task AddVideoAddsAJob()
     {
         await using var host = new Host(new Runner(Fixture("youtube-bbb.json")), new Slow(), ready: true);

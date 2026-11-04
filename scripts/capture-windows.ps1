@@ -237,6 +237,17 @@ function Test-Settings($app) {
  Select-Nav $app 'All downloads'
 }
 
+# Video downloads: a fresh data folder has no video tools; the card says so and offers to set them up.
+function Test-VideoSettings($app) {
+ Select-Nav $app 'Settings'
+ Select-Section $app 'Video downloads'
+ Wait-For { $texts = (Window $app).FindAll($scope,(New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty,[System.Windows.Automation.ControlType]::Text))); @($texts | Where-Object { $_.Current.Name -like 'Not set up yet*' }).Count -gt 0 } 'the video tools status'
+ Wait-For { Find-Named $app 'Set up video tools' } 'the Set up now button'
+ Capture $app '06-settings-video.png'
+ Select-Section $app 'General'
+ Select-Nav $app 'All downloads'
+}
+
 # Start from an empty list: stop any engine on the test data folder and clear it.
 function Stop-Engine {
  try { Send-Engine @{command='shutdown'} 500 | Out-Null } catch { return }
@@ -261,6 +272,7 @@ try {
  Test-Downloads $app
  Test-AddDialog $app
  Test-Settings $app
+ Test-VideoSettings $app
 
  # Closing the window must leave the engine downloading.
  Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.status -eq 'Downloading' }).Count -gt 0 } 'an active transfer'

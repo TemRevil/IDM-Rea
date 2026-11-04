@@ -30,6 +30,7 @@
                 <SelectorBarItem Text="General" Tag="GeneralSection" IsSelected="True"/>
                 <SelectorBarItem Text="Downloads" Tag="DownloadsSection"/>
                 <SelectorBarItem Text="Browser" Tag="BrowserSection"/>
+                <SelectorBarItem Text="Video downloads" Tag="VideoSection"/>
                 <SelectorBarItem Text="About" Tag="AboutSection"/>
             </SelectorBar>
             <StackPanel x:Name="GeneralSection" Spacing="4" AutomationProperties.Name="General settings">
@@ -159,6 +160,17 @@
                     </StackPanel>
                     <TextBox x:Name="BrowserMinBox" Grid.Column="1" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Smallest file to take over, in MB"
                              LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
+                </Grid>
+            </StackPanel>
+            <StackPanel x:Name="VideoSection" Spacing="4" Visibility="Collapsed" AutomationProperties.Name="Video downloads settings">
+                <Grid Style="{StaticResource Card}">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Video tools" Style="{StaticResource Label}"/>
+                        <TextBlock Text="yt-dlp finds the video a page plays, Deno helps it on some sites, and FFmpeg joins picture and sound. IDM-Rea downloads them from their official releases the first time you download a video (about 160 MB), checks each file, and keeps yt-dlp up to date." Style="{StaticResource Hint}"/>
+                        <TextBlock x:Name="VideoToolsText" Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+                    </StackPanel>
+                    <Button x:Name="VideoToolsButton" Grid.Column="1" Content="Update now" AutomationProperties.Name="Update video tools" Click="VideoTools_Click"/>
                 </Grid>
             </StackPanel>
             <StackPanel x:Name="AboutSection" Spacing="4" Visibility="Collapsed" AutomationProperties.Name="About settings">

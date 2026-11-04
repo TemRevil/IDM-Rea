@@ -39,9 +39,11 @@ public sealed class VideoSupport(VideoTools tools, IToolRunner runner, string te
         return tools.Status() with { Installing = true };
     }
 
-    /// <summary>Installs anything missing and fetches the newest yt-dlp now, whenever it was last checked.</summary>
+    /// <summary>Settings' button: tools that are missing start setting up (in the background, as on first use);
+    /// installed tools get the newest yt-dlp now, whenever it was last checked.</summary>
     public async Task<ToolStatus> UpdateAsync(CancellationToken token)
     {
+        if (!tools.Ready) return Prepare();
         await tools.EnsureAsync(null, token);
         await tools.UpdateYtDlpAsync(token, force: true);
         return tools.Status();

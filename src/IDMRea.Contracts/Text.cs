@@ -33,6 +33,7 @@ public static class Text
 
     public static string StatusLine(DownloadJob job, long bytesPerSecond, DateTimeOffset now, int retryAttempts = 5) => job.Status switch
     {
+        DownloadStatus.Downloading when job.Video?.Stage == VideoStage.Joining => "Putting the video together",
         DownloadStatus.Downloading when bytesPerSecond <= 0 => Amount(job),
         DownloadStatus.Downloading when job.TotalBytes is long total =>
             $"{Amount(job)} - {Speed(bytesPerSecond)} - {TimeLeft(TimeSpan.FromSeconds((double)Math.Max(0, total - job.ReceivedBytes) / bytesPerSecond))}",
@@ -43,10 +44,14 @@ public static class Text
             $"Retrying in {Math.Max(0, (long)Math.Ceiling(((job.NextRetryAt ?? now) - now).TotalSeconds)).ToString(Invariant)} s (attempt {job.Attempts.ToString(Invariant)} of {retryAttempts.ToString(Invariant)})",
         DownloadStatus.Finalizing => "Finishing",
         DownloadStatus.Completed => $"Done - {Size(job.TotalBytes ?? job.ReceivedBytes)}",
-        DownloadStatus.Failed => "Failed - " + LowerFirst(Describe(job.ErrorKind == ErrorKind.None ? ErrorKind.Other : job.ErrorKind, job.HttpStatus)),
+        DownloadStatus.Failed => "Failed - " + LowerFirst(FailureText(job)),
         DownloadStatus.Cancelled => "Cancelled",
         _ => job.Status.ToString(),
     };
+
+    /// <summary>Why a job failed. A video's own reason (from the site or yt-dlp) is kept in its words.</summary>
+    public static string FailureText(DownloadJob job) =>
+        job.Video != null && !string.IsNullOrEmpty(job.Error) ? job.Error : Describe(job.ErrorKind == ErrorKind.None ? ErrorKind.Other : job.ErrorKind, job.HttpStatus);
 
     private static string LowerFirst(string s) => s.Length == 0 ? s : char.ToLowerInvariant(s[0]) + s[1..];
 

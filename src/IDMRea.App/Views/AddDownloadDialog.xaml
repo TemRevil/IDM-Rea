@@ -26,6 +26,9 @@
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Paste or type a link to see the file's details."/>
         </Grid>
 
+        <ComboBox x:Name="QualityBox" Header="Quality" AutomationProperties.Name="Quality" HorizontalAlignment="Stretch" Visibility="Collapsed"
+                  SelectionChanged="QualityBox_SelectionChanged"/>
+
         <TextBox x:Name="NameBox" Header="File name" AutomationProperties.Name="File name" IsEnabled="False" TextChanged="NameBox_TextChanged"/>
 
         <Grid ColumnSpacing="8">

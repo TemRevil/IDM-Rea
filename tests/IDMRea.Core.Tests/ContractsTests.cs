@@ -112,6 +112,30 @@ public sealed class ContractsTests
         Assert.Equal("Cancelled", Text.StatusLine(Job(DownloadStatus.Cancelled), 0, now));
     }
 
+    [Fact]
+    public void VideoJobsSayWhatTheyAreDoing()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var video = new VideoJob("https://video.test/watch", "137+140", "mp4", [], VideoStage.Joining, "Clip", "1080p MP4");
+        Assert.Equal("Putting the video together", Text.StatusLine(Job(DownloadStatus.Downloading) with { Video = video }, 0, now));
+        var failed = Job(DownloadStatus.Failed) with { Video = video, ErrorKind = ErrorKind.Other, Error = "This video is protected against copying (DRM), so it can't be downloaded." };
+        Assert.Equal("Failed - this video is protected against copying (DRM), so it can't be downloaded.", Text.StatusLine(failed, 0, now));
+    }
+
+    [Fact]
+    public void VideoFilesAreNamedAfterTitleAndQuality()
+    {
+        var hd = new VideoChoice("137+140", "1080p MP4, 255 MB", "mp4", null, 1080, false);
+        var sound = new VideoChoice("140", "Sound only M4A, 9.8 MB", "m4a", null, null, true);
+        Assert.Equal("Big Buck Bunny (1080p).mp4", Videos.FileName("Big Buck Bunny", hd));
+        Assert.Equal("Big Buck Bunny.m4a", Videos.FileName("Big Buck Bunny", sound));
+        Assert.Equal("Part 2_ the end (1080p).mp4", Videos.FileName("  Part ٢: the end ", hd)); // digits made Western, unsafe characters replaced
+        Assert.Equal("Video (1080p).mp4", Videos.FileName("   ", hd));
+        Assert.EndsWith("a (1080p).mp4", Videos.FileName(new string('a', 300), hd)); // a long title is cut, never the quality or the type
+        Assert.Equal("1080p MP4", Videos.Quality(hd));
+        Assert.Equal("Sound only M4A", Videos.Quality(sound));
+    }
+
     [Theory]
     [InlineData(ErrorKind.Network, null, "Can't reach the server. Check your connection.")]
     [InlineData(ErrorKind.Timeout, null, "The server stopped responding.")]

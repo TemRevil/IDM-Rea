@@ -23,4 +23,24 @@ public sealed record ToolStatus(bool Ready, string? YtDlpVersion, bool Installin
 
 /// <summary>A download of what a page plays: its streams are fetched by the engine, then joined into one file.</summary>
 public sealed record VideoJob(string PageUrl, string ChoiceId, string Container, IReadOnlyList<VideoStream> Streams,
-    VideoStage Stage = VideoStage.Downloading, string? Title = null);
+    VideoStage Stage = VideoStage.Downloading, string? Title = null, string? Quality = null);
+
+public static class Videos
+{
+    private const int LongestTitle = 150;
+
+    /// <summary>The file a choice is saved as: the title, made safe, plus the quality and type ("Clip (1080p).mp4").
+    /// A long title is cut; the quality and the type always stay.</summary>
+    public static string FileName(string title, VideoChoice choice)
+    {
+        title = FileNames.SafeName(Text.NormalizeDigits(title.Trim()));
+        if (title is "" or "download") title = "Video";
+        if (title.Length > LongestTitle) title = title[..LongestTitle].TrimEnd(' ', '.');
+        var quality = choice is { AudioOnly: false, Height: int height } ? $" ({height}p)" : "";
+        return title + quality + "." + choice.Container;
+    }
+
+    /// <summary>"1080p MP4", or "Sound only M4A".</summary>
+    public static string Quality(VideoChoice choice) =>
+        (choice.AudioOnly ? "Sound only" : choice.Height is int height ? $"{height}p" : "Video") + " " + choice.Container.ToUpperInvariant();
+}

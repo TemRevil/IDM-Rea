@@ -38,8 +38,20 @@ public sealed partial class DetailsPane : UserControl
         KindIcon.Glyph = row.CategoryGlyph;
         NameText.Text = row.Name;
         StatusText.Text = row.StatusLine;
-        Parts.Show(job);
-        PartsText.Text = job.Parts is { Count: > 1 } parts ? $"{parts.Count} parts" : "One connection";
+        if (job.Video is { } video)
+        {
+            // The stream being fetched, then the join.
+            var current = video.Streams.FirstOrDefault(s => !s.Done) ?? video.Streams.LastOrDefault();
+            Parts.Show(current is null ? job : job with { Parts = current.Parts, TotalBytes = current.TotalBytes, ReceivedBytes = current.ReceivedBytes });
+            var done = video.Streams.Count(s => s.Done);
+            PartsText.Text = video.Stage == VideoStage.Joining ? "Putting picture and sound together"
+                : video.Streams.Count > 1 ? $"{done} of {video.Streams.Count} streams fetched, joined at the end" : "One stream";
+        }
+        else
+        {
+            Parts.Show(job);
+            PartsText.Text = job.Parts is { Count: > 1 } parts ? $"{parts.Count} parts" : "One connection";
+        }
         SizeText.Text = job.TotalBytes is long total ? Text.Size(total) : "Unknown";
         ReceivedText.Text = job.TotalBytes is long t2 && t2 > 0
             ? $"{Text.Size(job.ReceivedBytes)} ({(100.0 * job.ReceivedBytes / t2).ToString("0", CultureInfo.InvariantCulture)}%)"
@@ -59,7 +71,9 @@ public sealed partial class DetailsPane : UserControl
         UrlText.Text = job.Url;
         PathText.Text = job.Destination;
         ErrorInfo.IsOpen = job.Status == DownloadStatus.Failed;
-        ErrorInfo.Message = job.Status == DownloadStatus.Failed ? Text.Describe(job.ErrorKind == ErrorKind.None ? ErrorKind.Other : job.ErrorKind, job.HttpStatus) : "";
+        ErrorInfo.Message = job.Status == DownloadStatus.Failed ? Text.FailureText(job) : "";
+        QualityLabel.Visibility = QualityText.Visibility = job.Video?.Quality is null ? Visibility.Collapsed : Visibility.Visible;
+        QualityText.Text = job.Video?.Quality ?? "";
 
         OpenButton.Visibility = row.IsCompleted ? Visibility.Visible : Visibility.Collapsed;
         ToggleButton.Visibility = row.ToggleEnabled ? Visibility.Visible : Visibility.Collapsed;

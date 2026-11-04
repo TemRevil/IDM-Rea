@@ -59,7 +59,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <TextBlock Text="Size" Style="{StaticResource FieldLabel}"/>
                     <TextBlock x:Name="SizeText" Grid.Column="1" Style="{StaticResource FieldValue}"/>
@@ -79,6 +79,8 @@
                     <TextBlock x:Name="AttemptsText" Grid.Row="7" Grid.Column="1" Style="{StaticResource FieldValue}"/>
                     <TextBlock x:Name="ChecksumLabel" Grid.Row="8" Text="Checksum" Style="{StaticResource FieldLabel}"/>
                     <TextBlock x:Name="ChecksumText" Grid.Row="8" Grid.Column="1" Style="{StaticResource FieldValue}"/>
+                    <TextBlock x:Name="QualityLabel" Grid.Row="9" Text="Quality" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock x:Name="QualityText" Grid.Row="9" Grid.Column="1" Style="{StaticResource FieldValue}"/>
                 </Grid>
 
                 <StackPanel Spacing="6">

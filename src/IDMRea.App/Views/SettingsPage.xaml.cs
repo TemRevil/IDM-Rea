@@ -276,8 +276,64 @@ public sealed partial class SettingsPage : Page
     private void Sections_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
         var chosen = sender.SelectedItem?.Tag as string;
-        foreach (var panel in new[] { GeneralSection, DownloadsSection, BrowserSection, AboutSection })
+        foreach (var panel in new[] { GeneralSection, DownloadsSection, BrowserSection, VideoSection, AboutSection })
             panel.Visibility = panel.Name == chosen ? Visibility.Visible : Visibility.Collapsed;
+        if (chosen == nameof(VideoSection)) _ = WatchVideoToolsAsync();
+    }
+
+    private bool watchingTools;
+
+    /// <summary>Shows the video tools' state, and follows a setup under way while the tab is open.</summary>
+    private async Task WatchVideoToolsAsync()
+    {
+        if (watchingTools) return;
+        watchingTools = true;
+        try
+        {
+            while (VideoSection.Visibility == Visibility.Visible && IsLoaded)
+            {
+                var tools = await AskToolsAsync("videoTools");
+                if (tools is not { Installing: true }) return;
+                await Task.Delay(1500);
+            }
+        }
+        finally { watchingTools = false; }
+    }
+
+    private async Task<ToolStatus?> AskToolsAsync(string command)
+    {
+        try
+        {
+            var reply = await Shell.Client.SendAsync(new(command));
+            if (!reply.Ok || reply.Tools is not { } tools) { ShowTools(null, reply.Error ?? "IDM-Rea did not answer."); return null; }
+            ShowTools(tools, null);
+            return tools;
+        }
+        catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException)
+        {
+            ShowTools(null, "The download engine isn't running.");
+            return null;
+        }
+    }
+
+    private void ShowTools(ToolStatus? tools, string? problem)
+    {
+        VideoToolsText.Text = problem
+            ?? (tools!.Installing ? $"Setting up: {tools.Percent.ToString(CultureInfo.InvariantCulture)}%"
+            : tools.Ready ? $"Ready. yt-dlp {tools.YtDlpVersion ?? "installed"}."
+            : tools.Error is { } error ? $"Setup failed: {error}"
+            : "Not set up yet. They are downloaded the first time you download a video.");
+        VideoToolsButton.Content = tools is { Ready: false } ? "Set up now" : "Update now";
+        AutomationProperties.SetName(VideoToolsButton, tools is { Ready: false } ? "Set up video tools" : "Update video tools");
+        VideoToolsButton.IsEnabled = tools is not { Installing: true };
+    }
+
+    private async void VideoTools_Click(object sender, RoutedEventArgs e)
+    {
+        VideoToolsButton.IsEnabled = false;
+        VideoToolsText.Text = "Checking for a newer yt-dlp...";
+        var tools = await AskToolsAsync("updateVideoTools");
+        if (tools is { Installing: true }) await WatchVideoToolsAsync();
     }
 
     private void DataFolder_Click(object sender, RoutedEventArgs e)

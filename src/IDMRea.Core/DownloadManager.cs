@@ -157,13 +157,11 @@ public sealed class DownloadManager : IAsyncDisposable
         var category = choice.AudioOnly ? Category.Music : Category.Video;
         folder ??= Settings.FolderFor(category);
         var title = Text.NormalizeDigits(resolved.Info.Title.Trim());
-        if (title.Length == 0) title = "Video";
-        var quality = choice is { AudioOnly: false, Height: int height } ? $" ({height}p)" : "";
         await controls.WaitAsync();
         try
         {
             Directory.CreateDirectory(folder);
-            var destination = FileNames.UniquePath(folder, SafeName(title + quality + "." + choice.Container), path => File.Exists(path) || Directory.Exists(path)
+            var destination = FileNames.UniquePath(folder, Videos.FileName(title, choice), path => File.Exists(path) || Directory.Exists(path)
                 || Snapshot().Any(j => j.Destination.Equals(path, StringComparison.OrdinalIgnoreCase)));
             var id = Guid.NewGuid();
             var stem = destination + "." + id.ToString("N");
@@ -172,7 +170,7 @@ public sealed class DownloadManager : IAsyncDisposable
             Save(new DownloadJob(id, uri.AbsoluteUri, destination, stem + ".part", startPaused ? DownloadStatus.Paused : DownloadStatus.Queued,
                 TotalBytes: total, Category: category, CreatedAt: time.GetUtcNow(), PausedBy: startPaused ? PausedBy.Person : PausedBy.None,
                 Resumable: true, Referrer: headers?.Referrer, UserAgent: headers?.UserAgent, ProtectedCookies: CookieVault.Protect(headers?.Cookies),
-                Video: new VideoJob(uri.AbsoluteUri, choice.Id, choice.Container, streams, Title: title)));
+                Video: new VideoJob(uri.AbsoluteUri, choice.Id, choice.Container, streams, Title: title, Quality: Videos.Quality(choice))));
             if (!string.IsNullOrEmpty(headers?.Cookies)) lock (gate) cookies[id] = headers.Cookies;
             if (!startPaused) Start(id);
             return Get(id);
