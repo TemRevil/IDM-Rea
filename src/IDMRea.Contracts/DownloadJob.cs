@@ -25,7 +25,7 @@ public sealed record DownloadJob(Guid Id, string Url, string Destination, string
     int Attempts = 0, DateTimeOffset? NextRetryAt = null, ErrorKind ErrorKind = ErrorKind.None, int? HttpStatus = null,
     IReadOnlyList<DownloadPart>? Parts = null, PausedBy PausedBy = PausedBy.None, bool Resumable = false,
     string? ResolvedUrl = null, string? Referrer = null, string? UserAgent = null, string? ProtectedCookies = null,
-    string? ExpectedSha256 = null, bool Verified = false)
+    string? ExpectedSha256 = null, bool Verified = false, VideoJob? Video = null)
 {
     [JsonIgnore] public string FileName => Path.GetFileName(Destination);
 }

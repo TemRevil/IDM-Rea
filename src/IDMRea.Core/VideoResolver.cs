@@ -38,7 +38,7 @@ public sealed record ResolvedStreams(VideoInfo Info, VideoChoice Choice, IReadOn
 /// Asks yt-dlp what a page plays and turns its formats into a short list of choices: one per height, the most
 /// compatible picture (AVC, then AV1, then VP9) with the sound that fits its container, plus sound alone.
 /// </summary>
-public sealed partial class VideoResolver(IToolRunner runner, string tempFolder, string ytDlp, string deno)
+public sealed partial class VideoResolver(IToolRunner runner, string tempFolder, string ytDlp, string deno) : IVideoStreams
 {
     private sealed record Format(string Id, string Ext, string Protocol, string? VCodec, string? ACodec, int? Height, double Rate,
         long? Size, string Url, IReadOnlyDictionary<string, string>? Headers, long? Chunk, bool Drm)

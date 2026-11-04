@@ -13,7 +13,13 @@ public static class RequestHeadersExtensions
         if (Uri.TryCreate(headers.Referrer, UriKind.Absolute, out var referrer) && referrer.Scheme is "http" or "https") request.Headers.Referrer = referrer;
         if (!string.IsNullOrEmpty(headers.Cookies) && SameHost(headers.CookiesFor, request.RequestUri)) request.Headers.TryAddWithoutValidation("Cookie", headers.Cookies);
         if (!string.IsNullOrEmpty(headers.UserAgent)) request.Headers.TryAddWithoutValidation("User-Agent", headers.UserAgent);
+        foreach (var (name, value) in headers.Extra ?? new Dictionary<string, string>())
+            if (!Reserved.Contains(name) && !request.Headers.Contains(name)) request.Headers.TryAddWithoutValidation(name, value);
     }
+
+    /// <summary>Headers the engine sets itself, or that would send something to the wrong host.</summary>
+    private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
+        { "Host", "Cookie", "Range", "If-Range", "Accept-Encoding", "Content-Length", "Connection", "Transfer-Encoding", "User-Agent", "Referer" };
 
     private static bool SameHost(string? cookiesFor, Uri? target) =>
         cookiesFor is null || (Uri.TryCreate(cookiesFor, UriKind.Absolute, out var origin) && target is not null

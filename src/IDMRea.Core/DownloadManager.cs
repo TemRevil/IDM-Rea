@@ -8,7 +8,7 @@ namespace IDMRea.Core;
 /// <paramref name="WriteFault"/> is a test seam called before each write with its file offset.
 /// <paramref name="FreeSpace"/> replaces the drive's free bytes for a path (test seam).</summary>
 public sealed record ManagerOptions(Func<string, bool>? Recycle = null, TimeProvider? Time = null, HttpMessageHandler? Handler = null,
-    Func<long, Exception?>? WriteFault = null, Func<string, long>? FreeSpace = null);
+    Func<long, Exception?>? WriteFault = null, Func<string, long>? FreeSpace = null, VideoServices? Video = null);
 
 public sealed class DownloadManager : IAsyncDisposable
 {
@@ -56,7 +56,7 @@ public sealed class DownloadManager : IAsyncDisposable
             var job = original;
             switch (job.Status)
             {
-                case DownloadStatus.Finalizing: job = RecoverPublication(job); break;
+                case DownloadStatus.Finalizing: job = RecoverPublication(job); if (job.Status == DownloadStatus.Completed) VideoTransfer.DeleteStreamParts(job); break;
                 case DownloadStatus.Downloading or DownloadStatus.Queued: start.Add(job.Id); break;
                 case DownloadStatus.Paused when job.PausedBy == PausedBy.Engine: start.Add(job.Id); break;
                 case DownloadStatus.Retrying: wait.Add(job); break;
@@ -142,6 +142,44 @@ public sealed class DownloadManager : IAsyncDisposable
         finally { controls.Release(); }
     }
 
+    /// <summary>
+    /// Adds what a page plays, in the chosen quality. The file is named after the video ("Title (1080p).mp4"); its
+    /// streams download beside it and are joined when all are in.
+    /// </summary>
+    public async Task<DownloadJob> AddVideoAsync(string pageUrl, string choiceId, string? folder = null, bool startPaused = false, RequestHeaders? headers = null)
+    {
+        var video = options.Video ?? throw new InvalidOperationException("Video downloads aren't available.");
+        if (!Uri.TryCreate(pageUrl, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) throw new ArgumentException("Use an absolute HTTP or HTTPS URL.");
+        if (folder != null && !Path.IsPathFullyQualified(folder)) throw new ArgumentException("Use an absolute destination folder.");
+        if (headers?.IsEmpty == true) headers = null;
+        var resolved = await video.Streams.StreamsAsync(uri.AbsoluteUri, choiceId, headers, default);
+        var choice = resolved.Choice;
+        var category = choice.AudioOnly ? Category.Music : Category.Video;
+        folder ??= Settings.FolderFor(category);
+        var title = Text.NormalizeDigits(resolved.Info.Title.Trim());
+        if (title.Length == 0) title = "Video";
+        var quality = choice is { AudioOnly: false, Height: int height } ? $" ({height}p)" : "";
+        await controls.WaitAsync();
+        try
+        {
+            Directory.CreateDirectory(folder);
+            var destination = FileNames.UniquePath(folder, SafeName(title + quality + "." + choice.Container), path => File.Exists(path) || Directory.Exists(path)
+                || Snapshot().Any(j => j.Destination.Equals(path, StringComparison.OrdinalIgnoreCase)));
+            var id = Guid.NewGuid();
+            var stem = destination + "." + id.ToString("N");
+            var streams = resolved.Streams.Select(s => s with { PartialPath = stem + "." + SafeName(s.FormatId) + ".part" }).ToArray();
+            long? total = streams.All(s => s.TotalBytes > 0) ? streams.Sum(s => s.TotalBytes!.Value) : choice.Bytes;
+            Save(new DownloadJob(id, uri.AbsoluteUri, destination, stem + ".part", startPaused ? DownloadStatus.Paused : DownloadStatus.Queued,
+                TotalBytes: total, Category: category, CreatedAt: time.GetUtcNow(), PausedBy: startPaused ? PausedBy.Person : PausedBy.None,
+                Resumable: true, Referrer: headers?.Referrer, UserAgent: headers?.UserAgent, ProtectedCookies: CookieVault.Protect(headers?.Cookies),
+                Video: new VideoJob(uri.AbsoluteUri, choice.Id, choice.Container, streams, Title: title)));
+            if (!string.IsNullOrEmpty(headers?.Cookies)) lock (gate) cookies[id] = headers.Cookies;
+            if (!startPaused) Start(id);
+            return Get(id);
+        }
+        finally { controls.Release(); }
+    }
+
     /// <summary>Starts a job's worker. Callers hold <see cref="controls"/> (or are the constructor).</summary>
     private void Start(Guid id)
     {
@@ -213,7 +251,8 @@ public sealed class DownloadManager : IAsyncDisposable
             if (job.Status == DownloadStatus.Completed) return;
             if (cancel)
             {
-                File.Delete(job.PartialPath);
+                File.Delete(job.PartialPath); VideoTransfer.DeleteStreamParts(job);
+                if (job.Video != null) job = VideoTransfer.Reset(job);
                 Save(job with { Status = DownloadStatus.Cancelled, ReceivedBytes = 0, Parts = null, Error = null, NextRetryAt = null });
             }
             else if (resume) { if (job.Status != DownloadStatus.Cancelled) { if (job.Status == DownloadStatus.Failed) PrepareRetry(job); Start(id); } }
@@ -240,6 +279,13 @@ public sealed class DownloadManager : IAsyncDisposable
 
     private void PrepareRetry(DownloadJob job)
     {
+        if (job.Video != null)
+        {
+            // Each stream checks its own saved parts; only a changed video is fetched again from the start.
+            if (job.ErrorKind == ErrorKind.Changed) { VideoTransfer.DeleteStreamParts(job); job = VideoTransfer.Reset(job); }
+            Save(job with { Attempts = 0, Verified = false });
+            return;
+        }
         // A changed file or one that failed its checksum is downloaded again from the start.
         var canResume = job.ErrorKind is not (ErrorKind.Changed or ErrorKind.ChecksumMismatch) && File.Exists(job.PartialPath)
             && (job.Parts is { Count: > 0 } || job.ReceivedBytes > 0)
@@ -267,6 +313,7 @@ public sealed class DownloadManager : IAsyncDisposable
             await StopAsync(id);
             var job = Get(id);
             if (File.Exists(job.PartialPath)) File.Delete(job.PartialPath);
+            VideoTransfer.DeleteStreamParts(job);
             if (deleteFile && job.Status == DownloadStatus.Completed && File.Exists(job.Destination) && !Recycle(job.Destination))
                 throw new IOException("Couldn't move the file to the Recycle Bin.");
             lock (gate) { store.Delete(id); jobs.Remove(id); probes.Remove(id); cookies.Remove(id); }
@@ -352,19 +399,9 @@ public sealed class DownloadManager : IAsyncDisposable
             // New bytes mean the connection works again, so the retry count starts over.
             var context = new TransferContext(http, limiter, meter, () => Settings,
                 j => Save(j.ReceivedBytes > startBytes && j.Attempts != 0 ? j with { Attempts = 0 } : j), options.WriteFault, options.FreeSpace, HeadersFor(job));
-            if (job.ReceivedBytes > 0 || job.Parts != null) job = await RefreshLinkAsync(job, token);
-            if (job.Parts is { Count: > 0 } && job.Resumable && job.TotalBytes > 0)
-                job = await MultiPartTransfer.RunAsync(job, SavedProbe(job), context, token);
-            else if (job.ReceivedBytes == 0 && job.Parts == null)
-            {
-                ProbeResult? probe; lock (gate) probes.Remove(id, out probe);
-                probe ??= await ProbeAsync(job.Url, token, HeadersFor(job));
-                job = Save(job with { ResolvedUrl = probe.ResolvedUrl, Resumable = probe.Resumable });
-                job = probe.Resumable && probe.TotalBytes > 0
-                    ? await MultiPartTransfer.RunAsync(job, probe, context, token)
-                    : await SingleStreamTransfer.RunAsync(job, context, token);
-            }
-            else job = await SingleStreamTransfer.RunAsync(job, context, token);
+            job = job.Video != null
+                ? await VideoTransfer.RunAsync(job, options.Video ?? throw new InvalidOperationException("Video downloads aren't available."), context, HeadersFor(job), token)
+                : await FileAsync(id, job, context, token);
             // A checksum from the site is checked before the file gets its name, so a wrong file is never published.
             var verified = false;
             if (job.ExpectedSha256 is { } expected)
@@ -375,7 +412,7 @@ public sealed class DownloadManager : IAsyncDisposable
             }
             job = job with { CompletionFileId = FileIdentity.Of(job.PartialPath), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing, Verified = verified };
             ZoneMark.Write(job.PartialPath, job.Url); // the stream moves with the file
-            Save(job); File.Move(job.PartialPath, job.Destination, false);
+            Save(job); VideoTransfer.DeleteStreamParts(job); File.Move(job.PartialPath, job.Destination, false);
             Save(job with { Status = DownloadStatus.Completed, CompletedAt = time.GetUtcNow(), Attempts = 0, Error = null });
         }
         catch (Exception ex)
@@ -393,12 +430,26 @@ public sealed class DownloadManager : IAsyncDisposable
         }
     }
 
+    private async Task<DownloadJob> FileAsync(Guid id, DownloadJob job, TransferContext context, CancellationToken token)
+    {
+        if (job.ReceivedBytes > 0 || job.Parts != null) job = await RefreshLinkAsync(job, token);
+        if (job.Parts is { Count: > 0 } && job.Resumable && job.TotalBytes > 0)
+            return await MultiPartTransfer.RunAsync(job, SavedProbe(job), context, token);
+        if (job.ReceivedBytes > 0 || job.Parts != null) return await SingleStreamTransfer.RunAsync(job, context, token);
+        ProbeResult? probe; lock (gate) probes.Remove(id, out probe);
+        probe ??= await ProbeAsync(job.Url, token, HeadersFor(job));
+        job = Save(job with { ResolvedUrl = probe.ResolvedUrl, Resumable = probe.Resumable });
+        return probe.Resumable && probe.TotalBytes > 0
+            ? await MultiPartTransfer.RunAsync(job, probe, context, token)
+            : await SingleStreamTransfer.RunAsync(job, context, token);
+    }
+
     private void Fail(DownloadJob job, Exception ex)
     {
         var kind = RetryPolicy.Classify(ex);
         int? status = ex switch { TransferException { HttpStatus: int s } => s, HttpRequestException { StatusCode: { } code } => (int)code, _ => null };
         var attempts = job.Attempts; // already 0 if this run saved new bytes
-        var message = Text.Describe(kind, status);
+        var message = ex is VideoException ? ex.Message : Text.Describe(kind, status);
         if (RetryPolicy.IsRetryable(kind) && attempts < Settings.RetryAttempts)
         {
             var at = time.GetUtcNow() + RetryPolicy.Delay(attempts + 1, (ex as TransferException)?.RetryAfter);
