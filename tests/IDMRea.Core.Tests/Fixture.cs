@@ -23,6 +23,10 @@ internal sealed class Fixture : IAsyncDisposable
     public Dictionary<string, string> Headers { get; } = new(StringComparer.OrdinalIgnoreCase);
     public bool RedirectOnce { get; init; }
     public int? Status { get; init; }
+    /// <summary>The first request number (from 1) that gets <see cref="Status"/>; earlier ones are served normally.</summary>
+    public int StatusFrom { get; init; } = 1;
+    /// <summary>From this request number on, the connection is closed without any response.</summary>
+    public int? CloseFrom { get; init; }
     /// <summary>Apply <see cref="Delay"/> only to requests whose range starts at byte 0.</summary>
     public bool SlowFirstPart { get; init; }
     public int ChunkSize { get; init; } = 8192;
@@ -65,7 +69,8 @@ internal sealed class Fixture : IAsyncDisposable
         {
             await Write(stream, $"HTTP/1.1 302 Found\r\nLocation: /moved{Path}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"); return;
         }
-        if (Status is int status)
+        if (CloseFrom is int close && index >= close) return;
+        if (Status is int status && index >= StatusFrom)
         {
             await Write(stream, $"HTTP/1.1 {status} Status\r\nContent-Length: 0\r\nConnection: close\r\n{ExtraHeaders()}\r\n"); return;
         }

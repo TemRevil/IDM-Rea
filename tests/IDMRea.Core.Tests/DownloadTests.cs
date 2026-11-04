@@ -60,7 +60,7 @@ public sealed class DownloadTests
     [Fact]
     public async Task TruncatedResponseFailsWithoutPublication()
     {
-        await using var server = new Fixture { Mode = "truncate" }; var dir = Temp(); await using var manager = new DownloadManager(Path.Combine(dir,"data"));
+        await using var server = new Fixture { Mode = "truncate" }; var dir = Temp(); new JobStore(Path.Combine(dir, "data")).SaveSettings(new EngineSettings(RetryAttempts: 0)); await using var manager = new DownloadManager(Path.Combine(dir,"data"));
         var job = await manager.AddAsync(server.Url, dir); var failed = await Wait(manager, job.Id, DownloadStatus.Failed); Assert.False(File.Exists(failed.Destination));
         await manager.ControlAsync(job.Id, cancel: true); Assert.False(File.Exists(failed.PartialPath));
     }

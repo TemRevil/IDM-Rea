@@ -118,6 +118,7 @@ public sealed class RegressionTests
     {
         await using var server = new Fixture { Mode = "truncate" };
         var root = Temp();
+        new JobStore(Path.Combine(root, "data")).SaveSettings(new EngineSettings(RetryAttempts: 0));
         await using var manager = new DownloadManager(Path.Combine(root, "data"));
         var job = await manager.AddAsync(server.Url, root);
         await Finished(manager, job.Id);
