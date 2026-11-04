@@ -1,0 +1,76 @@
+{
+  "manifest_version": 3,
+  "name": "IDM-Rea",
+  "version": "1.0.0",
+  "description": "Shows the real files on a page, stops click traps and bad sites, and downloads with IDM-Rea.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxg8XbAETKaQwUsQCpGpewAv3K/Yk14v4/N7JE1i5wKyJSKo+EZP8flocqZTNlUK1LuQt9T9tUK92dEznhgmSgxICUel8L/JMFV0xIC0Hyrc4Rv92SWi2womsxVEra4oljTw1ffnjFaEdT1k5IQOmAEYpF8qoZX7E6PFKfwmfev3tvLtA+hTAurjS8gJi3SKDwoQoEDRIRvmz7cS5MmMksuo2HgLLX4PVo8wctYMMwC3xEkolpKb89JHqxr0pDcVP0iFOenQ/cWva3ccsMdrdO2oLT18kG3Lk6LrtZGjq+3HwFrLOIhSYD6r4tV8xaybC4Yp405GcjZLPGsY69CugmwIDAQAB",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "IDM-Rea",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "nativeMessaging",
+    "downloads",
+    "cookies",
+    "storage",
+    "tabs",
+    "webNavigation",
+    "declarativeNetRequest",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/guard-main.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/page.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "blocked.html",
+        "lib/*.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

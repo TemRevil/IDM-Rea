@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>IDM-Rea</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <header>
+    <img src="icons/icon-32.png" alt="" width="20" height="20">
+    <span class="title">IDM-Rea</span>
+    <span class="status" id="status"><span class="dot"></span><span id="status-text">Checking</span></span>
+  </header>
+
+  <p class="hint" id="connect-hint" hidden></p>
+
+  <section>
+    <h2 id="files-title">Files on this page</h2>
+    <div id="files"></div>
+    <p class="empty" id="no-files" hidden>No downloadable files found on this page.</p>
+    <div class="row" id="files-actions" hidden>
+      <button class="primary" id="download">Download selected</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Protection</h2>
+    <p class="stats" id="stats"></p>
+    <label class="switch">
+      <input type="checkbox" id="guard" role="switch">
+      <span class="track"><span class="thumb"></span></span>
+      <span id="guard-text">Block click traps on this site</span>
+    </label>
+  </section>
+
+  <footer>
+    <span id="lists">Lists not downloaded yet</span>
+    <button class="link" id="update">Update now</button>
+  </footer>
+</body>
+</html>

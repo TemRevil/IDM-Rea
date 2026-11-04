@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blocked by IDM-Rea</title>
+  <link rel="icon" href="icons/icon-32.png">
+  <style>
+    :root { --bg: #F6F6F3; --text: #1E1E1E; --muted: #6B6B66; --line: #E2E2DE; --button: #E9E9E5; --primary: #2B2B2B; --primary-text: #F7F7F5; --mark: #9B2C24; color-scheme: light; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1A1A1A; --text: #EDEDEA; --muted: #A2A29D; --line: #333331; --button: #2E2E2E; --primary: #EDEDEA; --primary-text: #1A1A1A; --mark: #E58A80; color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; background: var(--bg); color: var(--text);
+      font: 400 15px/1.55 "Inter Tight", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    main { width: min(560px, 100%); }
+    .brand { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+    h1 { margin: 20px 0 8px; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+    .reason { margin: 0; }
+    .source { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .address { margin: 20px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font: 13px/1.5 "IBM Plex Mono", Consolas, monospace; overflow-wrap: anywhere; }
+    .address b { color: var(--mark); font-weight: 600; }
+    .actions { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+    button { font: inherit; font-size: 14px; font-weight: 500; border: 0; border-radius: 7px; padding: 8px 16px; cursor: pointer; background: var(--button); color: var(--text); }
+    button.primary { background: var(--primary); color: var(--primary-text); }
+    button:focus-visible { outline: 2px solid #8C96A3; outline-offset: 2px; }
+    .small { margin-top: 28px; color: var(--muted); font-size: 12.5px; }
+  </style>
+  <script type="module" src="blocked.js"></script>
+</head>
+<body>
+  <main>
+    <div class="brand"><img src="icons/icon-32.png" alt="" width="18" height="18"> IDM-Rea</div>
+    <h1 id="title">This site was blocked</h1>
+    <p class="reason" id="reason"></p>
+    <p class="source" id="source"></p>
+    <p class="address" id="address"></p>
+    <div class="actions">
+      <button class="primary" id="back">Go back</button>
+      <button id="continue">Continue anyway</button>
+    </div>
+    <p class="small">Continue anyway opens this site in this tab until the tab is closed.</p>
+  </main>
+</body>
+</html>
