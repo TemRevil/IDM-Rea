@@ -1,8 +1,6 @@
 using System.Runtime.InteropServices;
 namespace IDMRea.Engine.Windows;
 
-public enum TrayCommand { Open = 1, AddFromClipboard, PauseAll, ResumeAll, Quit }
-
 /// <summary>
 /// The notification-area icon, on its own thread with a hidden message-only window.
 /// Commands are raised on that thread; handlers should hand work off quickly.
@@ -10,7 +8,8 @@ public enum TrayCommand { Open = 1, AddFromClipboard, PauseAll, ResumeAll, Quit 
 public sealed class TrayIcon : IDisposable
 {
     private const uint CallbackMessage = Native.WM_APP + 1, TooltipMessage = Native.WM_APP + 2, IconMessage = Native.WM_APP + 3;
-    private readonly Action<TrayCommand> onCommand;
+    private readonly Action<TrayChoice> onCommand;
+    private readonly Func<TrayState> state;
     private readonly Thread thread;
     private readonly ManualResetEventSlim ready = new();
     private readonly Native.WndProc proc; // kept alive for as long as the window exists
@@ -21,9 +20,9 @@ public sealed class TrayIcon : IDisposable
     private volatile string tooltip = "IDM-Rea - idle";
     private volatile string? iconFile;
 
-    public TrayIcon(Action<TrayCommand> onCommand)
+    public TrayIcon(Action<TrayChoice> onCommand, Func<TrayState> state)
     {
-        this.onCommand = onCommand;
+        this.onCommand = onCommand; this.state = state;
         proc = WindowProc;
         thread = new Thread(Run) { IsBackground = true, Name = "Tray" };
         thread.SetApartmentState(ApartmentState.STA);
@@ -57,6 +56,7 @@ public sealed class TrayIcon : IDisposable
         Native.RegisterClassExW(ref wc);
         window = Native.CreateWindowExW(0, className, "IDM-Rea", 0, 0, 0, 0, 0, Native.HWND_MESSAGE, IntPtr.Zero, instance, IntPtr.Zero);
         taskbarCreated = Native.RegisterWindowMessageW("TaskbarCreated");
+        FollowDarkMode();
         icon = LoadOwnIcon();
         Add();
         ready.Set();
@@ -91,7 +91,7 @@ public sealed class TrayIcon : IDisposable
             case CallbackMessage:
                 switch ((int)lParam & 0xFFFF)
                 {
-                    case Native.WM_LBUTTONDBLCLK: Raise(TrayCommand.Open); break;
+                    case Native.WM_LBUTTONDBLCLK: Raise(new(TrayCommand.Open)); break;
                     case Native.WM_RBUTTONUP or Native.WM_CONTEXTMENU: ShowMenu(); break;
                 }
                 return IntPtr.Zero;
@@ -120,23 +120,50 @@ public sealed class TrayIcon : IDisposable
 
     private void ShowMenu()
     {
-        var menu = Native.CreatePopupMenu();
-        Native.AppendMenuW(menu, Native.MF_STRING, (UIntPtr)(uint)TrayCommand.Open, "Open IDM-Rea");
-        Native.AppendMenuW(menu, Native.MF_STRING, (UIntPtr)(uint)TrayCommand.AddFromClipboard, "Add from clipboard");
-        Native.AppendMenuW(menu, Native.MF_SEPARATOR, UIntPtr.Zero, null);
-        Native.AppendMenuW(menu, Native.MF_STRING, (UIntPtr)(uint)TrayCommand.PauseAll, "Pause all");
-        Native.AppendMenuW(menu, Native.MF_STRING, (UIntPtr)(uint)TrayCommand.ResumeAll, "Resume all");
-        Native.AppendMenuW(menu, Native.MF_SEPARATOR, UIntPtr.Zero, null);
-        Native.AppendMenuW(menu, Native.MF_STRING, (UIntPtr)(uint)TrayCommand.Quit, "Quit");
+        TrayState now;
+        try { now = state(); } catch (Exception) { now = new(0, 0, true, true, 0); }
+        var menu = Build(TrayMenu.Build(now));
         Native.GetCursorPos(out var at);
         // Without this the menu does not close when clicking elsewhere.
         Native.SetForegroundWindow(window);
         var chosen = Native.TrackPopupMenu(menu, Native.TPM_RIGHTBUTTON | Native.TPM_RETURNCMD | Native.TPM_NONOTIFY, at.X, at.Y, 0, window, IntPtr.Zero);
-        Native.DestroyMenu(menu);
-        if (chosen > 0) Raise((TrayCommand)chosen);
+        Native.DestroyMenu(menu); // also destroys the submenus
+        if (TrayMenu.Decode(chosen) is { } choice) Raise(choice);
     }
 
-    private void Raise(TrayCommand command) => ThreadPool.QueueUserWorkItem(_ => onCommand(command));
+    private static IntPtr Build(IReadOnlyList<TrayMenuItem> items)
+    {
+        var menu = Native.CreatePopupMenu();
+        foreach (var item in items)
+        {
+            if (item.Separator) { Native.AppendMenuW(menu, Native.MF_SEPARATOR, UIntPtr.Zero, null); continue; }
+            var flags = (item.Enabled ? 0 : Native.MF_GRAYED) | (item.Checked ? Native.MF_CHECKED : 0);
+            if (item.Items is { } children) Native.AppendMenuW(menu, flags | Native.MF_POPUP, (UIntPtr)(ulong)Build(children), item.Text);
+            else Native.AppendMenuW(menu, flags | Native.MF_STRING, (UIntPtr)(uint)item.Id, item.Text);
+            if (item.Default) Native.SetMenuDefaultItem(menu, (uint)item.Id, 0);
+        }
+        return menu;
+    }
+
+    /// <summary>
+    /// Menus follow Windows' dark mode only when the process opts in. The switch is uxtheme's SetPreferredAppMode
+    /// (ordinal 135, Windows 10 1903 and later), which has no documented name; without it the menu stays light.
+    /// </summary>
+    private static void FollowDarkMode()
+    {
+        var uxtheme = Native.LoadLibraryW("uxtheme.dll");
+        if (uxtheme == IntPtr.Zero) return;
+        var setMode = Native.GetProcAddress(uxtheme, 135);
+        var flush = Native.GetProcAddress(uxtheme, 136); // FlushMenuThemes
+        if (setMode == IntPtr.Zero) return;
+        Marshal.GetDelegateForFunctionPointer<SetPreferredAppMode>(setMode)(1); // 1 = follow Windows
+        if (flush != IntPtr.Zero) Marshal.GetDelegateForFunctionPointer<FlushMenuThemes>(flush)();
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int SetPreferredAppMode(int mode);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate void FlushMenuThemes();
+
+    private void Raise(TrayChoice choice) => ThreadPool.QueueUserWorkItem(_ => onCommand(choice));
 
     public void Dispose()
     {

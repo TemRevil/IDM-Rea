@@ -75,11 +75,57 @@ public sealed class DownloadTests
         var dest = Path.Combine(dir, "final.bin"); var part = dest + ".part";
         await File.WriteAllBytesAsync(mode == "after" ? dest : part, bytes);
         if (mode == "occupied") await File.WriteAllTextAsync(dest, "unrelated");
-        var job = new DownloadJob(Guid.NewGuid(), "http://localhost/test", dest, part, DownloadStatus.Finalizing, bytes.Length, bytes.Length, CompletionSha256: Convert.ToHexString(SHA256.HashData(bytes)));
+        var job = new DownloadJob(Guid.NewGuid(), "http://localhost/test", dest, part, DownloadStatus.Finalizing, bytes.Length, bytes.Length, CompletionFileId: FileIdentity.Of(mode == "after" ? dest : part));
         new JobStore(data).Save(job); await using var manager = new DownloadManager(data); var recovered = manager.Snapshot().Single();
         Assert.Equal(mode == "occupied" ? DownloadStatus.Failed : DownloadStatus.Completed, recovered.Status);
         if (mode == "occupied") Assert.Equal("unrelated", await File.ReadAllTextAsync(dest)); else Assert.Equal(bytes, await File.ReadAllBytesAsync(dest));
+        if (mode == "occupied") { Assert.Equal(ErrorKind.NameTaken, recovered.ErrorKind); Assert.Equal(Text.Describe(ErrorKind.NameTaken, null), recovered.Error); }
     }
+
+    /// <summary>A finished file that vanished before it was saved fails plainly, and Retry downloads it again from the start.</summary>
+    [Fact]
+    public async Task LostFinishedFileIsDownloadedAgainOnRetry()
+    {
+        await using var server = new Fixture(); var dir = Temp(); var data = Path.Combine(dir, "data");
+        var dest = Path.Combine(dir, "final.bin"); var part = dest + ".part";
+        new JobStore(data).Save(new DownloadJob(Guid.NewGuid(), server.Url, dest, part, DownloadStatus.Finalizing, server.BodySize, server.BodySize, "\"v1\"", Parts: [new DownloadPart(0, server.BodySize - 1, server.BodySize)], Resumable: true));
+        await using var manager = new DownloadManager(data);
+        var lost = manager.Snapshot().Single();
+        Assert.Equal((DownloadStatus.Failed, ErrorKind.Lost), (lost.Status, lost.ErrorKind));
+        Assert.Equal(Text.Describe(ErrorKind.Lost, null), lost.Error);
+        await manager.RetryAsync(lost.Id);
+        var done = await Wait(manager, lost.Id, DownloadStatus.Completed, DownloadStatus.Failed);
+        Assert.Equal(DownloadStatus.Completed, done.Status);
+        Assert.Equal(server.Body, await File.ReadAllBytesAsync(dest));
+    }
+    /// <summary>The finished file's identity is Windows' file ID, which stays with the file when it is moved into place.</summary>
+    [Fact]
+    public async Task CompletionRecordsAFileIdThatSurvivesTheMove()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        await using var server = new Fixture(); var dir = Temp();
+        await using var manager = new DownloadManager(Path.Combine(dir, "data")); var job = await manager.AddAsync(server.Url, dir);
+        var done = await Wait(manager, job.Id, DownloadStatus.Completed, DownloadStatus.Failed);
+        Assert.Equal(DownloadStatus.Completed, done.Status);
+        Assert.NotNull(done.CompletionFileId);
+        Assert.Equal(FileIdentity.Of(done.Destination), done.CompletionFileId);
+    }
+
+    /// <summary>After a crash, a file of the same size that is not ours is never claimed as the download.</summary>
+    [Fact]
+    public async Task RecoveryIgnoresAnUnrelatedFileOfTheSameSize()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var dir = Temp(); var data = Path.Combine(dir, "data"); var bytes = RandomNumberGenerator.GetBytes(4096);
+        var dest = Path.Combine(dir, "final.bin"); var part = dest + ".part";
+        await File.WriteAllBytesAsync(part, bytes); var ours = FileIdentity.Of(part); File.Delete(part);
+        var unrelated = RandomNumberGenerator.GetBytes(4096); await File.WriteAllBytesAsync(dest, unrelated);
+        new JobStore(data).Save(new DownloadJob(Guid.NewGuid(), "http://localhost/test", dest, part, DownloadStatus.Finalizing, bytes.Length, bytes.Length, CompletionFileId: ours));
+        await using var manager = new DownloadManager(data);
+        Assert.Equal(DownloadStatus.Failed, manager.Snapshot().Single().Status);
+        Assert.Equal(unrelated, await File.ReadAllBytesAsync(dest));
+    }
+
     [Fact]
     public async Task RealClientProcessProtocolPersistenceAndOwnership()
     {

@@ -49,29 +49,15 @@ public partial class App : Application
         InitializeComponent();
     }
 
+    private static LaunchArguments Arguments(AppActivationArguments activation) =>
+        LaunchArguments.Parse(activation.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launch ? launch.Arguments : "");
+
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         window = new MainWindow();
         var queue = DispatcherQueue.GetForCurrentThread();
-        AppInstance.GetCurrent().Activated += (_, e) => queue.TryEnqueue(() => window.Reactivate(LaunchArguments.From(e)));
+        AppInstance.GetCurrent().Activated += (_, e) => queue.TryEnqueue(() => window.Reactivate(Arguments(e)));
         window.Activate();
-        window.Handle(LaunchArguments.From(AppInstance.GetCurrent().GetActivatedEventArgs()));
-    }
-}
-
-/// <summary>What a launch asked for: <c>--job &lt;id&gt;</c> opens that download, <c>--add-clipboard</c> opens the Add dialog.</summary>
-public sealed record LaunchArguments(Guid? Job, bool AddFromClipboard)
-{
-    public static LaunchArguments From(AppActivationArguments activation) =>
-        Parse(activation.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launch ? launch.Arguments : "");
-
-    public static LaunchArguments Parse(string? commandLine)
-    {
-        var tokens = (commandLine ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(t => t.Trim('"')).ToArray();
-        Guid? job = null;
-        for (var i = 0; i < tokens.Length - 1; i++)
-            if (tokens[i] == "--job" && Guid.TryParse(tokens[i + 1], out var id)) job = id;
-        return new(job, tokens.Contains("--add-clipboard"));
+        window.Handle(Arguments(AppInstance.GetCurrent().GetActivatedEventArgs()));
     }
 }

@@ -3,12 +3,13 @@
 ## Processes
 
 - **App** (`IDMRea.App.exe`, WinUI 3, unpackaged, single instance): only shows and controls downloads.
-  - A second launch hands its arguments to the running window and exits: `--job <id>` opens a download's details, `--add-clipboard` opens the Add dialog.
+  - A second launch hands its arguments to the running window and exits: `--job <id>` opens a download's details, `--add-clipboard` opens the Add dialog, `--settings` opens Settings.
   - While the window is minimised it stops listening for updates.
 - **Engine** (`engine\IDMRea.Engine.exe`): does all downloading.
   - The app starts it when needed. It keeps running after the window closes and shows the tray icon and notifications.
   - It holds `engine.lock` in the data folder, so a second engine exits with code 2.
 - Closing the window either keeps downloading in the tray (default) or pauses everything and stops the engine (Settings).
+- The tray icon's right-click menu is built fresh each time it opens and follows Windows' light or dark mode. It shows how many files are downloading and how fast, then: Open IDM-Rea (also a double-click), Add from clipboard, Pause all and Resume all (each enabled only when it applies), a Speed limit submenu (No limit, 512 KB/s to 10 MB/s; a limit typed in Settings stays listed and ticked), Open downloads folder, Settings, and Quit.
 
 ## IPC (version 2)
 
@@ -38,10 +39,10 @@ Version-1 clients still get version-1 replies.
 4. **Checks on every response.** Status, `Content-Range`, total length and validator. A changed file stops with "The file changed on the server". A server that ignores ranges falls back to one connection.
 5. **Checkpoints** every 500 ms and on stop. The part file is flushed to disk first, then each part's progress is saved, so saved progress never counts bytes that aren't on disk.
 6. **Publishing.**
-   - The finished part file is hashed (SHA-256) and the job saved as Finalizing.
+   - The finished part file's Windows file ID (volume serial and file index, which stay with the file through the move) is recorded and the job saved as Finalizing.
    - The part file gets the internet zone mark (a `Zone.Identifier` stream with ZoneId=3 and the link, minus any user name or password), so Windows warns before running it.
    - The file is moved into place without overwriting anything there, then marked Completed.
-   - After a crash, Finalizing jobs are matched by hash, and unrelated files are never touched.
+   - After a crash, Finalizing jobs are matched by size and file ID (size only on other systems), and unrelated files are never touched. If another file took the name, the job fails with "Another file now has this name"; if the finished file vanished, it fails and Retry downloads it again.
 7. **Retries.** Network errors, timeouts, `429` and `5xx` are retried up to the set number of times (default 5), after 2, 5, 15, 30 and 60 s, or after the server's `Retry-After` (at most 10 minutes). Other errors fail at once with a plain-language reason.
 8. **Speed.** One limit is shared by all downloads and changes apply at once. The speed shown is the average over the last 3 s.
 

@@ -25,15 +25,21 @@ public static class MultiPartTransfer
         var total = probe.TotalBytes is > 0 and long t ? t : throw new ArgumentException("A multi-part download needs a known size.");
         var run = new Run(job, probe, total, ctx);
         Exception? failure = null;
+        SparseFile.Mark(job.PartialPath);
         using (var handle = File.OpenHandle(job.PartialPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, FileOptions.Asynchronous))
         {
             run.Prepare(handle);
-            try { await run.CoordinateAsync(token); SparseFile.Unmark(handle); }
+            try { await run.CoordinateAsync(token); }
             catch (Exception ex) { failure = ex; }
             if (failure is not RangesRefused) run.Checkpoint();
         }
+        if (failure == null) SparseFile.Unmark(job.PartialPath);
         if (failure is RangesRefused)
+        {
+            // One connection writes from the start: empty the file first, so clearing the mark has no holes to fill.
+            File.Open(job.PartialPath, FileMode.Truncate).Dispose(); SparseFile.Unmark(job.PartialPath);
             return await SingleStreamTransfer.RunAsync(run.Job with { Parts = null, ReceivedBytes = 0, Resumable = false }, ctx, token);
+        }
         if (failure != null) ExceptionDispatchInfo.Capture(failure).Throw();
         return run.Job;
     }
@@ -57,14 +63,13 @@ public static class MultiPartTransfer
             var saved = Job.Parts;
             var keep = saved is { Count: > 0 } && saved.Sum(p => p.Length) == total && RandomAccess.GetLength(handle) == total;
             parts.AddRange(keep ? saved! : PartPlanner.Initial(total, settings.EffectiveParts, settings.MinPartSize));
-            // The sparse file below takes no space up front, so a download that cannot fit has to be caught here.
+            // The part file is sparse, so it takes no space up front: a download that cannot fit has to be caught here.
             if (ctx.FreeBytes(Job.PartialPath) is long free && free < parts.Sum(p => p.Remaining))
                 throw new TransferException(ErrorKind.DiskFull, "Not enough disk space.");
-            SparseFile.Mark(handle);
             if (RandomAccess.GetLength(handle) != total) RandomAccess.SetLength(handle, total);
             claimed.AddRange(parts.Select(p => p.Received));
             for (var i = 0; i < parts.Count; i++) if (!parts[i].Done) pending.Enqueue(i);
-            Job = Job with { TotalBytes = total, ETag = probe.ETag, LastModified = probe.LastModified, ResolvedUrl = probe.ResolvedUrl, Resumable = true, CompletionSha256 = null };
+            Job = Job with { TotalBytes = total, ETag = probe.ETag, LastModified = probe.LastModified, ResolvedUrl = probe.ResolvedUrl, Resumable = true, CompletionFileId = null };
             Checkpoint();
         }
 

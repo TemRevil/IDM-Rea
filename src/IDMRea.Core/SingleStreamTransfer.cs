@@ -40,7 +40,7 @@ public static class SingleStreamTransfer
         else if (response.StatusCode == HttpStatusCode.OK)
         { offset = 0; file.SetLength(0); file.Position = 0; total = response.Content.Headers.ContentLength; }
         else throw new IOException("Expected a complete or ranged HTTP response.");
-        job = job with { ReceivedBytes = offset, TotalBytes = total, ETag = etag, LastModified = modified, CompletionSha256 = null }; ctx.Checkpoint(job);
+        job = job with { ReceivedBytes = offset, TotalBytes = total, ETag = etag, LastModified = modified, CompletionFileId = null }; ctx.Checkpoint(job);
         await using var body = await response.Content.ReadAsStreamAsync(token);
         var buffer = ArrayPool<byte>.Shared.Rent(ctx.Settings().BufferSize); var checkpoint = Environment.TickCount64;
         try

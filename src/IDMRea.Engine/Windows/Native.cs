@@ -6,7 +6,7 @@ internal static class Native
 {
     public const int WM_DESTROY = 0x0002, WM_CLOSE = 0x0010, WM_LBUTTONDBLCLK = 0x0203, WM_RBUTTONUP = 0x0205, WM_CONTEXTMENU = 0x007B, WM_APP = 0x8000;
     public const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
-    public const uint MF_STRING = 0x0, MF_SEPARATOR = 0x800, TPM_RIGHTBUTTON = 0x2, TPM_RETURNCMD = 0x100, TPM_NONOTIFY = 0x80;
+    public const uint MF_STRING = 0x0, MF_GRAYED = 0x1, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RIGHTBUTTON = 0x2, TPM_RETURNCMD = 0x100, TPM_NONOTIFY = 0x80;
     public static readonly IntPtr HWND_MESSAGE = new(-3);
     public const int IDI_APPLICATION = 32512;
     public const uint IMAGE_ICON = 1, LR_LOADFROMFILE = 0x10;
@@ -65,6 +65,9 @@ internal static class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool AppendMenuW(IntPtr menu, uint flags, UIntPtr id, string? text);
     [DllImport("user32.dll")] public static extern int TrackPopupMenu(IntPtr menu, uint flags, int x, int y, int reserved, IntPtr hWnd, IntPtr rect);
     [DllImport("user32.dll")] public static extern bool DestroyMenu(IntPtr menu);
+    [DllImport("user32.dll")] public static extern bool SetMenuDefaultItem(IntPtr menu, uint item, uint byPosition);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr LoadLibraryW(string name);
+    [DllImport("kernel32.dll")] public static extern IntPtr GetProcAddress(IntPtr module, IntPtr ordinal);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr LoadIconW(IntPtr instance, IntPtr name);

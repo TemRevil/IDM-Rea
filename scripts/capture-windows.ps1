@@ -244,6 +244,10 @@ try {
  [void]$app.CloseMainWindow(); $app.WaitForExit(10000) | Out-Null
  if (!$app.HasExited) { throw 'The app did not exit when its window closed.' }
  if (!(Get-Process IDMRea.Engine -ErrorAction SilentlyContinue)) { throw 'The engine (and its tray icon) stopped when the window closed.' }
+ # The tray icon and its menu are drawn at the screen's real scale only when the engine is DPI aware.
+ Add-Type -Namespace Dpi -Name Shcore -MemberDefinition '[DllImport("shcore.dll")] public static extern int GetProcessDpiAwareness(IntPtr process, out int value);'
+ $awareness = -1; [void][Dpi.Shcore]::GetProcessDpiAwareness((Get-Process IDMRea.Engine | Select-Object -First 1).Handle, [ref]$awareness)
+ if ($awareness -ne 2) { throw "The engine is not per-monitor DPI aware (value $awareness)." }
  $before = (Send-Engine @{command='list'}).jobs | Where-Object { $_.status -eq 'Downloading' } | Select-Object -First 1
  Start-Sleep -Seconds 1
  $after = (Send-Engine @{command='list'}).jobs | Where-Object { $_.id -eq $before.id }

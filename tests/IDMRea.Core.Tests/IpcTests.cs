@@ -24,6 +24,7 @@ public sealed class IpcTests
         private readonly string? previous = Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY");
         private readonly CancellationTokenSource stop = new();
         private readonly DownloadManager manager;
+        public DownloadManager Manager => manager;
         private readonly Task run;
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "idmrea-ipc-" + Guid.NewGuid());
         public RecordingShell Shell { get; } = new();
@@ -111,6 +112,32 @@ public sealed class IpcTests
         var probed = await host.Send(new("probe", server.Url, Version: 2));
         Assert.True(probed.Ok, probed.Error);
         Assert.Equal(server.BodySize, probed.Probe!.TotalBytes);
+    }
+
+    /// <summary>A setting changed inside the engine (the tray's speed limit) reaches an open app and the shell.</summary>
+    [Fact]
+    public async Task SettingsChangedInTheEngineArePushed()
+    {
+        await using var host = new Host();
+        await using var subscription = await Subscription.OpenAsync();
+        Assert.True((await subscription.NextAsync(TimeSpan.FromSeconds(5)))!.Full);
+        await host.Manager.ApplySettingsAsync(host.Manager.Settings with { SpeedLimitBytesPerSecond = 2 * 1024 * 1024 });
+        EngineResponse? pushed = null;
+        for (var i = 0; i < 5 && pushed?.Settings == null; i++) pushed = await subscription.NextAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(2 * 1024 * 1024, pushed?.Settings?.SpeedLimitBytesPerSecond);
+        Assert.Equal(2 * 1024 * 1024, Assert.Single(host.Shell.Settings).SpeedLimitBytesPerSecond);
+    }
+
+    [Theory]
+    [InlineData("--settings", false, true)]
+    [InlineData("--add-clipboard", true, false)]
+    [InlineData("", false, false)]
+    public void LaunchArgumentsParse(string line, bool clipboard, bool settings)
+    {
+        var parsed = LaunchArguments.Parse(line);
+        Assert.Equal((clipboard, settings), (parsed.AddFromClipboard, parsed.OpenSettings));
+        var id = Guid.NewGuid();
+        Assert.Equal(id, LaunchArguments.Parse($"--job {id}").Job);
     }
 
     [Fact]

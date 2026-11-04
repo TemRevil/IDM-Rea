@@ -104,7 +104,7 @@ public sealed class RegressionTests
         var body = RandomNumberGenerator.GetBytes(2048);
         await File.WriteAllBytesAsync(moved ? destination : part, body);
         var job = new DownloadJob(Guid.NewGuid(), "https://example.test/file", destination, part,
-            DownloadStatus.Finalizing, body.Length, CompletionSha256: Convert.ToHexString(SHA256.HashData(body)));
+            DownloadStatus.Finalizing, body.Length, CompletionFileId: FileIdentity.Of(moved ? destination : part));
         var data = Path.Combine(root, "data");
         new JobStore(data).Save(job);
         await using var manager = new DownloadManager(data);

@@ -41,7 +41,7 @@ public static class Text
         DownloadStatus.Paused => $"Paused - {Amount(job)}",
         DownloadStatus.Retrying =>
             $"Retrying in {Math.Max(0, (long)Math.Ceiling(((job.NextRetryAt ?? now) - now).TotalSeconds)).ToString(Invariant)} s (attempt {job.Attempts.ToString(Invariant)} of {retryAttempts.ToString(Invariant)})",
-        DownloadStatus.Finalizing => "Checking file",
+        DownloadStatus.Finalizing => "Finishing",
         DownloadStatus.Completed => $"Done - {Size(job.TotalBytes ?? job.ReceivedBytes)}",
         DownloadStatus.Failed => "Failed - " + LowerFirst(Describe(job.ErrorKind == ErrorKind.None ? ErrorKind.Other : job.ErrorKind, job.HttpStatus)),
         DownloadStatus.Cancelled => "Cancelled",
@@ -65,6 +65,8 @@ public static class Text
         ErrorKind.Changed => "The file changed on the server. Retry to download it again from the start.",
         ErrorKind.DiskFull => "Not enough disk space.",
         ErrorKind.AccessDenied => "Can't write to the save folder.",
+        ErrorKind.NameTaken => "Another file now has this name, so it was left alone. Move or rename it, then retry.",
+        ErrorKind.Lost => "The finished file went missing before it was saved. Retry to download it again.",
         _ => "Something went wrong.",
     };
 

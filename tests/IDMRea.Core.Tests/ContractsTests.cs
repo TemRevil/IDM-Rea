@@ -83,7 +83,7 @@ public sealed class ContractsTests
         Assert.Equal("Waiting", Text.StatusLine(Job(DownloadStatus.Queued), 0, now));
         Assert.Equal("Paused - 12.4 MB of 640 MB", Text.StatusLine(Job(DownloadStatus.Paused), 0, now));
         Assert.Equal("Retrying in 12 s (attempt 2 of 5)", Text.StatusLine(Job(DownloadStatus.Retrying) with { Attempts = 2, NextRetryAt = now.AddSeconds(12) }, 0, now, retryAttempts: 5));
-        Assert.Equal("Checking file", Text.StatusLine(Job(DownloadStatus.Finalizing), 0, now));
+        Assert.Equal("Finishing", Text.StatusLine(Job(DownloadStatus.Finalizing), 0, now));
         Assert.Equal("Done - 640 MB", Text.StatusLine(Job(DownloadStatus.Completed, 671088640), 0, now));
         Assert.Equal("Failed - the server refused the request.", Text.StatusLine(Job(DownloadStatus.Failed) with { ErrorKind = ErrorKind.ClientError, HttpStatus = 403 }, 0, now));
         Assert.Equal("Cancelled", Text.StatusLine(Job(DownloadStatus.Cancelled), 0, now));

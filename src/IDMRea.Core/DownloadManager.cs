@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.NetworkInformation;
-using System.Security.Cryptography;
 using IDMRea.Contracts;
 
 namespace IDMRea.Core;
@@ -32,6 +31,8 @@ public sealed class DownloadManager : IAsyncDisposable
 
     public event Action<DownloadJob>? JobChanged;
     public event Action<Guid>? JobRemoved;
+    /// <summary>Raised after new settings are saved, from the app or from inside the engine (the tray menu).</summary>
+    public event Action<EngineSettings>? SettingsChanged;
     /// <summary>Raised once when a job becomes Completed or Failed.</summary>
     public event Action<DownloadJob>? JobFinished;
 
@@ -228,7 +229,7 @@ public sealed class DownloadManager : IAsyncDisposable
         if (!canResume)
         {
             if (File.Exists(job.PartialPath)) File.Delete(job.PartialPath);
-            job = job with { ReceivedBytes = 0, Parts = null, TotalBytes = null, ETag = null, LastModified = null, CompletionSha256 = null };
+            job = job with { ReceivedBytes = 0, Parts = null, TotalBytes = null, ETag = null, LastModified = null, CompletionFileId = null };
         }
         Save(job with { Attempts = 0 });
     }
@@ -302,6 +303,7 @@ public sealed class DownloadManager : IAsyncDisposable
             limiter.BytesPerSecond = next.SpeedLimitBytesPerSecond;
         }
         finally { controls.Release(); }
+        SettingsChanged?.Invoke(next);
     }
 
     private static ProbeResult SavedProbe(DownloadJob job) => new(job.Url, job.ResolvedUrl ?? job.Url, job.FileName, job.TotalBytes,
@@ -345,7 +347,7 @@ public sealed class DownloadManager : IAsyncDisposable
                     : await SingleStreamTransfer.RunAsync(job, context, token);
             }
             else job = await SingleStreamTransfer.RunAsync(job, context, token);
-            job = job with { CompletionSha256 = await FileHash.Sha256Async(job.PartialPath, token), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing };
+            job = job with { CompletionFileId = FileIdentity.Of(job.PartialPath), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing };
             ZoneMark.Write(job.PartialPath, job.Url); // the stream moves with the file
             Save(job); File.Move(job.PartialPath, job.Destination, false);
             Save(job with { Status = DownloadStatus.Completed, CompletedAt = time.GetUtcNow(), Attempts = 0, Error = null });
@@ -384,17 +386,20 @@ public sealed class DownloadManager : IAsyncDisposable
     {
         bool Matches(string path)
         {
-            if (!File.Exists(path) || new FileInfo(path).Length != job.ReceivedBytes || job.CompletionSha256 == null) return false;
-            using var file = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(file)) == job.CompletionSha256;
+            // The file ID stays with the file through the move; without one (other systems) the size has to do.
+            return File.Exists(path) && new FileInfo(path).Length == job.ReceivedBytes
+                && (job.CompletionFileId == null || FileIdentity.Of(path) == job.CompletionFileId);
         }
         try
         {
             if (Matches(job.Destination)) return job with { Status = DownloadStatus.Completed, TotalBytes = job.ReceivedBytes, Error = null };
-            if (File.Exists(job.Destination)) throw new IOException("Destination is occupied; existing file preserved.");
-            if (!Matches(job.PartialPath)) throw new IOException("Publication checkpoint does not match the partial file.");
+            // Another file took the name: it is left alone. The finished file is gone: Retry finds no part file and starts over.
+            if (File.Exists(job.Destination)) return Failed(ErrorKind.NameTaken);
+            if (!Matches(job.PartialPath)) return Failed(ErrorKind.Lost);
             File.Move(job.PartialPath, job.Destination, false); return job with { Status = DownloadStatus.Completed, TotalBytes = job.ReceivedBytes, Error = null };
         }
-        catch (Exception ex) { return job with { Status = DownloadStatus.Failed, Error = ex.Message }; }
+        catch (Exception ex) { return job with { Status = DownloadStatus.Failed, ErrorKind = RetryPolicy.Classify(ex), Error = Text.Describe(RetryPolicy.Classify(ex), null) }; }
+        DownloadJob Failed(ErrorKind kind) => job with { Status = DownloadStatus.Failed, ErrorKind = kind, Error = Text.Describe(kind, null) };
     }
 
     /// <summary>Running jobs are saved as paused by the engine, so they carry on at the next start.</summary>

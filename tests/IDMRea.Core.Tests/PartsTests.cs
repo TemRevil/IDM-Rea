@@ -136,6 +136,7 @@ public sealed class PartsTests
         Assert.Equal(DownloadStatus.Completed, done.Status);
         Assert.Equal(server.Body, await File.ReadAllBytesAsync(done.Destination));
         Assert.True(done.Parts is null or { Count: 0 });
+        if (OperatingSystem.IsWindows()) Assert.False(File.GetAttributes(done.Destination).HasFlag(FileAttributes.SparseFile));
     }
 
     [Fact]

@@ -11,6 +11,7 @@
     <ProjectReference Include="../../src/IDMRea.Core/IDMRea.Core.csproj" />
     <ProjectReference Include="../../src/IDMRea.Engine/IDMRea.Engine.csproj" />
     <Compile Include="../../src/IDMRea.App/EngineClient.cs" Link="EngineClient.cs" />
+    <Compile Include="../../src/IDMRea.App/LaunchArguments.cs" Link="LaunchArguments.cs" />
   </ItemGroup>
   <!-- The Windows target runs only the Windows-specific tests; everything else runs once, on net10.0. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">

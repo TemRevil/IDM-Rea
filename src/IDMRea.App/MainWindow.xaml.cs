@@ -191,6 +191,7 @@ public sealed partial class MainWindow : Window
 
     public void Handle(LaunchArguments args)
     {
+        if (args.OpenSettings) SelectNav("settings");
         if (args.Job is null && !args.AddFromClipboard) return;
         if (!State.HasSettings) { pending = args; return; }
         if (args.Job is Guid id) ShowJob(id);

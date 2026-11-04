@@ -39,7 +39,7 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
     public async Task RunAsync(CancellationToken stop)
     {
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(stop);
-        manager.JobChanged += OnChanged; manager.JobRemoved += OnRemoved; manager.JobFinished += shell.Notify;
+        manager.JobChanged += OnChanged; manager.JobRemoved += OnRemoved; manager.JobFinished += shell.Notify; manager.SettingsChanged += OnSettings;
         var connections = new List<Task>();
         var pending = CreatePipe();
         try
@@ -60,7 +60,7 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
         {
             pending.Dispose(); stopping.Cancel();
             await Task.WhenAll(connections);
-            manager.JobChanged -= OnChanged; manager.JobRemoved -= OnRemoved; manager.JobFinished -= shell.Notify;
+            manager.JobChanged -= OnChanged; manager.JobRemoved -= OnRemoved; manager.JobFinished -= shell.Notify; manager.SettingsChanged -= OnSettings;
         }
     }
 
@@ -69,7 +69,7 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
 
     private void OnChanged(DownloadJob job) { lock (gate) foreach (var s in subscribers) { lock (s) s.Changed.Add(job.Id); s.Wake(); } }
     private void OnRemoved(Guid id) { lock (gate) foreach (var s in subscribers) { lock (s) { s.Changed.Remove(id); s.Removed.Add(id); } s.Wake(); } }
-    private void OnSettings() { lock (gate) foreach (var s in subscribers) { lock (s) s.SettingsChanged = true; s.Wake(); } }
+    private void OnSettings(EngineSettings settings) { shell.SettingsChanged(settings); lock (gate) foreach (var s in subscribers) { lock (s) s.SettingsChanged = true; s.Wake(); } }
 
     private async Task ServeAsync(NamedPipeServerStream pipe, CancellationTokenSource stopping)
     {
@@ -125,7 +125,7 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
             case "getSettings": settings = manager.Settings; break;
             case "setSettings":
                 await manager.ApplySettingsAsync(request.Settings ?? throw new ArgumentException("Missing settings."));
-                settings = manager.Settings; shell.SettingsChanged(settings); OnSettings(); break;
+                settings = manager.Settings; break;
             case "shutdown": break;
             default: throw new ArgumentException("Unknown command.");
         }
