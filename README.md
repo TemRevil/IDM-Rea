@@ -1,19 +1,45 @@
 # IDM-Rea
 
-Independent Windows download manager using C# and WinUI 3. Reconstructed on 2026-11-03 from a detailed handoff after the previous workspace became inaccessible. This is new source requiring fresh verification.
+A Windows download manager written in C# with WinUI 3. It contains no IDM code or proprietary binaries.
 
-The design uses a separate background engine, SQLite checkpoints, validated HTTP resume, and current-user named-pipe IPC. It does not contain IDM code or proprietary binaries. Research observations in the handoff informed the design; original raw REA evidence is unavailable in this workspace and is not recreated.
+## What it does
 
-Windows build: `pwsh scripts/publish-windows.ps1`. Run `artifacts/windows/IDMRea.App.exe` and keep the output folder together. The app targets Windows x64. Closing the window leaves transfers running; use the stop-engine command for a graceful shutdown.
+- **Downloads in parts.** Servers that allow byte ranges get up to 8 parts per file (16 with Ultra performance), and a part that finishes early splits the slowest one so every connection stays busy. Downloads resume after a pause, a crash or a restart, but only when the server proves the file hasn't changed (strong ETag, or Last-Modified).
+- **Retries on its own.** Network errors, timeouts and busy servers are retried up to 5 times, after 2, 5, 15, 30 and 60 s. A server's `Retry-After` is honoured, up to 10 minutes.
+- **Keeps working without the window.** A small background engine does the downloading. Closing the window leaves it running in the notification area, and unfinished downloads carry on after a restart. Notifications appear when a download finishes or fails.
+- **Files by type.** Video, Music, Documents, Programs, Archives, Images and Other each have their own folder.
+- **The app:**
+  - Lists: All, Downloading, Queued and paused, Completed, Failed, plus one per type.
+  - Search and sort, actions on several downloads at once, and a details pane that shows each part.
+  - An Add dialog that checks the link first and shows its name, size, type and whether it can resume. It picks up a link from the clipboard (Ctrl+N or Ctrl+V) or from a link dropped on the window.
+- **Settings:** downloads at once, parts per file, a shared speed limit, retries, what closing the window does, start with Windows, notifications, theme, and per-type folders.
+- **Follows Windows.** Light or dark mode and the Windows accent colour. The icon is drawn in the accent colour too.
 
-No signed installer, browser integration, segmented transfers, tray icon, or automatic startup is implemented.
+## Build and run
 
-Open `IDMRea.slnx` on Windows with the .NET 10 SDK and WinUI tooling. Cross-platform engine tests: `dotnet test tests/IDMRea.Core.Tests -c Release`.
+Needs Windows x64 and the .NET 10 SDK.
 
-See [architecture](docs/architecture.md), [research provenance](docs/investigation.md), and [verification status](docs/verification.md). The Windows workflow attempts actual app runtime capture after publishing; captures and binaries are Actions artifacts, not committed source.
+```powershell
+pwsh scripts/publish-windows.ps1          # tests, then publishes the app and engine to artifacts\windows
+artifacts\windows\IDMRea.App.exe          # keep the folder together: the engine lives in engine\
+```
 
-The original workspace later recovered. [The comparison and fixes](docs/workspace-review.md)
-retain the reconstruction's Windows/IPC improvements and restore missing transfer
-and UI behavior. Original research artifacts remain local.
+Engine tests also run on Linux: `dotnet test tests/IDMRea.Core.Tests -c Release`.
 
-The reviewed version passed [Actions run 41638803847](https://github.com/TemRevil/IDM-Rea/actions/runs/41638803847): all **29 engine/integration tests** passed on Windows and Linux, and the actual WinUI runtime checks passed. Download `IDM-Rea-windows-x64` for the unsigned app folder and `IDM-Rea-runtime-screenshots` for real captures using controlled local test downloads. The captures were downloaded and visually checked; the completed, paused and active rows fit together at the default window size.
+Checks on Windows:
+
+- `scripts/capture-windows.ps1` drives the real app through UI Automation against local test downloads and saves screenshots.
+- `scripts/measure-resources.ps1` measures CPU and memory.
+
+Both use the local server in `scripts/fixture-server.py` (needs Python 3).
+
+There is no signed installer or browser integration yet.
+
+## More
+
+- [Architecture](docs/architecture.md)
+- [Verification](docs/verification.md)
+- [Research provenance](docs/investigation.md)
+- [Workspace review](docs/workspace-review.md)
+
+Built by Tem Revil, with Claude as coding assistant.
