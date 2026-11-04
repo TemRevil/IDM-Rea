@@ -7,6 +7,6 @@ try {
  if ($LASTEXITCODE -ne 0) { throw 'UI publish failed' }
  if (!(Test-Path artifacts/windows/resources.pri)) { throw 'Published WinUI resource index is missing.' }
  Get-ChildItem artifacts/windows -Recurse -File -Include *.pri,*.xbf | Select-Object FullName,Length | Format-Table
- dotnet publish src/IDMRea.Engine -c Release -r win-x64 --self-contained true -o artifacts/windows/engine
+ dotnet publish src/IDMRea.Engine -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true -o artifacts/windows/engine
  if ($LASTEXITCODE -ne 0) { throw 'Engine publish failed' }
 } finally { Pop-Location }

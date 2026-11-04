@@ -1,1 +1,22 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include="../IDMRea.Core/IDMRea.Core.csproj" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>IDMRea.Engine</RootNamespace>
+    <!-- A small background process: workstation, non-concurrent GC keeps memory and threads low. -->
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <OutputType>WinExe</OutputType>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'">
+    <Compile Remove="Windows/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../IDMRea.Core/IDMRea.Core.csproj" />
+  </ItemGroup>
+</Project>
