@@ -68,4 +68,4 @@ The database contains download URLs; never commit it. Nothing here protects agai
 - Windows 11 controls: Mica, the title bar control, navigation view and content dialogs.
 - Follows Windows light or dark mode (or the theme set in Settings) and the Windows accent colour, including live changes.
 - The icon, a progress ring in three parts around a chevron on a charcoal tile, is drawn at run time (`IconArt`) with the accent as the ring. A lighter shade is used if the accent would disappear on the tile.
-- The exe's own icon file, which Windows shows before the app runs, keeps a fixed copper ring. `scripts/make-icon.cs` writes it from the same code.
+- The exe's own icon file, which Windows shows before the app runs, keeps a fixed neutral grey ring. `scripts/make-icon.cs` writes it from the same code.

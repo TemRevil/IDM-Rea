@@ -7,5 +7,5 @@ using IDMRea.Contracts;
 
 var root = Path.GetFullPath(Path.Combine(AppContext.GetData("EntryPointFileDirectoryPath") as string ?? "scripts", ".."));
 var target = Path.Combine(root, "src", "IDMRea.App", "Assets", "AppIcon.ico");
-File.WriteAllBytes(target, IconArt.Ico(IconArt.DefaultRing));
+File.WriteAllBytes(target, IconArt.Ico(IconArt.ExeRing));
 Console.WriteLine($"Wrote {target} ({string.Join(", ", IconArt.IcoSizes)})");

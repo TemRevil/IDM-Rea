@@ -98,7 +98,7 @@ public class IconArtTests
             Assert.Equal((ico, png), IconArt.Files(Blue, folder));
             Assert.Equal(old, File.GetLastWriteTimeUtc(ico));
             Assert.Equal(old, File.GetLastWriteTimeUtc(png));
-            Assert.EndsWith("ring-C46532.ico", IconArt.Files(IconArt.DefaultRing, folder).Ico);
+            Assert.EndsWith("ring-A8A29E.ico", IconArt.Files(IconArt.ExeRing, folder).Ico);
         }
         finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
     }

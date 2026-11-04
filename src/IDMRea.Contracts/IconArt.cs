@@ -15,8 +15,9 @@ public readonly record struct Rgb(byte R, byte G, byte B)
 public static class IconArt
 {
     public static readonly Rgb Tile = new(0x1F, 0x1D, 0x1B), Mark = new(0xF4, 0xEF, 0xEA);
-    /// <summary>The ring in the exe's own icon file, which Windows shows before the app runs.</summary>
-    public static readonly Rgb DefaultRing = new(0xC4, 0x65, 0x32);
+    /// <summary>The ring in the exe's own icon file, which Windows shows before the app runs. Neutral grey, so it
+    /// sits well beside any accent colour.</summary>
+    public static readonly Rgb ExeRing = new(0xA8, 0xA2, 0x9E);
     public static readonly int[] IcoSizes = [16, 20, 24, 32, 40, 48, 64, 256];
     private const int Samples = 4; // per axis, for anti-aliasing
     private static readonly uint[] CrcTable = BuildCrcTable();
