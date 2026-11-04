@@ -32,7 +32,7 @@ artifacts\windows\IDMRea.App.exe          # keep the folder together: the engine
 
 Engine tests also run on Linux: `dotnet test tests/IDMRea.Core.Tests -c Release`. The extension's rules: `npm test` in `src/IDMRea.Extension` (Node 22 or later).
 
-To use the extension: Settings, Browser, "Add to browser", then load `artifacts\windows\extension` as an unpacked extension (the dialog shows the three steps).
+To use the extension: Settings, Browser, "Add to browser". It opens Chrome's or Edge's extensions page and copies the folder to load; there, turn on Developer mode, press Load unpacked and paste the folder. Browsers only install extensions without these steps from their own store.
 
 Checks on Windows:
 

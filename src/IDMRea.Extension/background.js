@@ -89,7 +89,8 @@ let nextId = 1;
 function native(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendNativeMessage(HOST, { id: nextId++, ...message }, (reply) => {
-      if (chrome.runtime.lastError) resolve({ ok: false, connected: false, error: NOT_CONNECTED });
+      // Chrome's own reason is kept: "not found" means Add to browser was never pressed; anything else is a real fault.
+      if (chrome.runtime.lastError) resolve({ ok: false, connected: false, error: NOT_CONNECTED, detail: chrome.runtime.lastError.message || '' });
       else resolve(reply || { ok: false, error: 'IDM-Rea did not answer.' });
     });
   });
@@ -99,7 +100,8 @@ let helloCache = null;
 async function hello() {
   if (helloCache && Date.now() - helloCache.at < 60_000) return helloCache.reply;
   const reply = await native({ type: 'hello' });
-  helloCache = { at: Date.now(), reply };
+  // Only an answer is remembered, so pressing Add to browser shows up the next time the menu opens.
+  helloCache = reply.ok ? { at: Date.now(), reply } : null;
   return reply;
 }
 

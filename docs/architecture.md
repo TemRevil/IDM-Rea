@@ -78,6 +78,7 @@ Stored in `%LOCALAPPDATA%\IDMRea`; `IDMREA_DATA_DIRECTORY` overrides it (used by
 | `icons\ring-RRGGBB.ico/png` | the icon drawn in each accent colour used |
 | `app-startup.log` | app start-up errors |
 | `browser\com.idmrea.host.json` | the native host manifest, written by "Add to browser" |
+| `browser\extension\` | the copy of the extension the browser loads unpacked; "Add to browser" makes it and each engine start refreshes it from the app, so it outlives an app update or move |
 
 "Add to browser" also points `HKCU\Software\{Google\Chrome, Microsoft\Edge, Chromium}\NativeMessagingHosts\com.idmrea.host` at that manifest, and writes `%LOCALAPPDATA%\IDMRea\browser-target.txt` with the data folder the host should use (the browser starts it without the app's environment; an `IDMREA_DATA_DIRECTORY` in the browser's own environment wins). Cookies sent with a browser download are stored with the job encrypted for the current Windows user (DPAPI).
 

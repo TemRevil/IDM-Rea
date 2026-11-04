@@ -4,7 +4,7 @@ Results from 2026-11-04 on Windows 11 x64 (.NET SDK 10.0.402, Intel Core 6th gen
 
 ## Tests
 
-`dotnet test tests/IDMRea.Core.Tests -c Release`: 201 passed on `net10.0` and 9 on `net10.0-windows`, none failed. Engine tests also run on Linux in CI.
+`dotnet test tests/IDMRea.Core.Tests -c Release`: 201 passed on `net10.0` and 12 on `net10.0-windows`, none failed. Engine tests also run on Linux in CI.
 
 They cover, against a local HTTP server with switchable faults:
 
@@ -18,7 +18,7 @@ They cover, against a local HTTP server with switchable faults:
 - The pipe protocol (versions 1 and 2, `subscribe` pushes) and a server that takes 21 s to answer a link check.
 - Settings, file names, categories, sidebar counts, search (Arabic-Indic digits search as 0-9) and the drawn icon.
 - Browser downloads: the referrer, cookies and user agent reach the server on the check and on every part; cookies are never stored in plain text, survive a restart, and never reach another host after a redirect; a download without a folder goes to its type's folder; the SHA-256 check (a match is marked verified, a mismatch fails with a plain reason and Retry downloads again).
-- The native host: its framing, the folder it chooses, and an `add` that goes through the engine; the registry keys and manifest "Add to browser" writes.
+- The native host: its framing, the folder it chooses, and an `add` that goes through the engine; the registry keys and manifest "Add to browser" writes, the extension copy it keeps current, its plain refusal when the extension is missing, and finding Chrome and Edge from App Paths.
 - The tray menu: status line, which actions are enabled, the ticked speed limit (including one typed in Settings), and what each item does. A speed limit changed inside the engine is pushed to an open app.
 
 The Recycle Bin test runs only with `IDMREA_TEST_RECYCLE=1`, because each run leaves its test file in the real Recycle Bin. CI sets it.

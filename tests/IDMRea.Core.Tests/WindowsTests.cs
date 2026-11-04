@@ -1,3 +1,4 @@
+using IDMRea.App;
 using IDMRea.Contracts;
 using IDMRea.Engine.Windows;
 using Microsoft.Win32;
@@ -13,11 +14,12 @@ public sealed class WindowsTests
         var dir = Path.Combine(Path.GetTempPath(), "idmrea-tests-" + Guid.NewGuid());
         var data = Path.Combine(dir, "data"); var home = Path.Combine(dir, "home");
         var registration = new BrowserRegistration(prefix);
+        var extension = FakeExtension(dir);
         string? Key(string browser) { using var key = Registry.CurrentUser.OpenSubKey($@"{prefix}\{browser}\NativeMessagingHosts\com.idmrea.host"); return key?.GetValue("") as string; }
         string HostPath(string manifest) { using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest)); return doc.RootElement.GetProperty("path").GetString()!; }
         try
         {
-            registration.Register(@"C:\Apps\IDM-Rea\engine\IDMRea.BrowserHost.exe", data, home);
+            registration.Register(@"C:\Apps\IDM-Rea\engine\IDMRea.BrowserHost.exe", data, home, extension);
             var manifest = Path.Combine(data, "browser", "com.idmrea.host.json");
             Assert.All(new[] { @"Google\Chrome", @"Microsoft\Edge", "Chromium" }, b => Assert.Equal(manifest, Key(b)));
             using (var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest)))
@@ -31,12 +33,80 @@ public sealed class WindowsTests
             Assert.Equal(Path.GetFullPath(data), File.ReadAllText(Path.Combine(home, "browser-target.txt")).Trim());
 
             // Another data folder (a test run) never takes the registration over; the owner's own folder refreshes it.
-            Assert.False(registration.RefreshIfOwned(@"D:\Other\IDMRea.BrowserHost.exe", Path.Combine(dir, "other"), home));
+            Assert.False(registration.RefreshIfOwned(@"D:\Other\IDMRea.BrowserHost.exe", Path.Combine(dir, "other"), home, extension));
             Assert.Equal(@"C:\Apps\IDM-Rea\engine\IDMRea.BrowserHost.exe", HostPath(manifest));
-            Assert.True(registration.RefreshIfOwned(@"D:\Moved\IDMRea.BrowserHost.exe", data, home));
+            Assert.True(registration.RefreshIfOwned(@"D:\Moved\IDMRea.BrowserHost.exe", data, home, extension));
             Assert.Equal(@"D:\Moved\IDMRea.BrowserHost.exe", HostPath(manifest));
         }
-        finally { Registry.CurrentUser.DeleteSubKeyTree(prefix, false); }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(prefix, false); Directory.Delete(dir, true); }
+    }
+
+    private static string FakeExtension(string dir)
+    {
+        var source = Path.Combine(dir, "app", "extension");
+        Directory.CreateDirectory(Path.Combine(source, "lib"));
+        File.WriteAllText(Path.Combine(source, "manifest.json"), "{\"version\":\"1\"}");
+        File.WriteAllText(Path.Combine(source, "lib", "rules.js"), "// rules");
+        return source;
+    }
+
+    [Fact]
+    public void AddToBrowserCopiesTheExtensionIntoTheDataFolderAndKeepsItCurrent()
+    {
+        const string prefix = @"Software\IDMRea-Tests";
+        var dir = Path.Combine(Path.GetTempPath(), "idmrea-tests-" + Guid.NewGuid());
+        var data = Path.Combine(dir, "data"); var home = Path.Combine(dir, "home");
+        var registration = new BrowserRegistration(prefix);
+        var source = FakeExtension(dir);
+        var copy = Protocol.ExtensionFolderFor(data);
+        try
+        {
+            registration.Register(@"C:\Apps\engine\IDMRea.BrowserHost.exe", data, home, source);
+            Assert.Equal(Path.Combine(Path.GetFullPath(data), "browser", "extension"), copy);
+            Assert.Equal("// rules", File.ReadAllText(Path.Combine(copy, "lib", "rules.js")));
+
+            // A newer app: one file changed, one gone. The engine's start refreshes the copy the browser loads.
+            File.WriteAllText(Path.Combine(source, "manifest.json"), "{\"version\":\"2\"}");
+            File.Delete(Path.Combine(source, "lib", "rules.js"));
+            Assert.True(registration.RefreshIfOwned(@"D:\Moved\engine\IDMRea.BrowserHost.exe", data, home, source));
+            Assert.Equal("{\"version\":\"2\"}", File.ReadAllText(Path.Combine(copy, "manifest.json")));
+            Assert.False(File.Exists(Path.Combine(copy, "lib", "rules.js")));
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(prefix, false); Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void AddToBrowserWithoutTheExtensionSaysSoAndRegistersNothing()
+    {
+        const string prefix = @"Software\IDMRea-Tests";
+        var dir = Path.Combine(Path.GetTempPath(), "idmrea-tests-" + Guid.NewGuid());
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => new BrowserRegistration(prefix)
+                .Register(@"C:\Apps\engine\IDMRea.BrowserHost.exe", Path.Combine(dir, "data"), Path.Combine(dir, "home"), Path.Combine(dir, "missing")));
+            Assert.Equal("The extension folder isn't next to the app. Install IDM-Rea again to get it.", error.Message);
+            using var key = Registry.CurrentUser.OpenSubKey($@"{prefix}\Google\Chrome\NativeMessagingHosts\com.idmrea.host");
+            Assert.Null(key);
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(prefix, false); if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void InstalledBrowsersAreFoundFromTheirAppPathsEntries()
+    {
+        const string appPaths = @"Software\IDMRea-Tests\App Paths";
+        var dir = Path.Combine(Path.GetTempPath(), "idmrea-tests-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        var chrome = Path.Combine(dir, "chrome.exe");
+        File.WriteAllText(chrome, "");
+        try
+        {
+            using (var key = Registry.CurrentUser.CreateSubKey($@"{appPaths}\chrome.exe")) key.SetValue("", $"\"{chrome}\"");
+            using (var key = Registry.CurrentUser.CreateSubKey($@"{appPaths}\msedge.exe")) key.SetValue("", Path.Combine(dir, "gone", "msedge.exe"));
+            var found = Assert.Single(InstalledBrowsers.Find(Registry.CurrentUser, appPaths));
+            Assert.Equal(new InstalledBrowser("Chrome", chrome, "chrome://extensions/"), found);
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(@"Software\IDMRea-Tests", false); Directory.Delete(dir, true); }
     }
 
     [Fact]

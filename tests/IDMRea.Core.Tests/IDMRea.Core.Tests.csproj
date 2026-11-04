@@ -17,6 +17,7 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
     <Compile Remove="*.cs" />
     <Compile Include="WindowsTests.cs" />
+    <Compile Include="../../src/IDMRea.App/InstalledBrowsers.cs" Link="InstalledBrowsers.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'">
     <Compile Remove="WindowsTests.cs" />

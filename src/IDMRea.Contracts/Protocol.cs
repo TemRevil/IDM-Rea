@@ -30,6 +30,8 @@ public static class Protocol
     /// <summary>The longest a link check may take; <c>probe</c> and <c>add</c> replies can take this long.</summary>
     public static readonly TimeSpan ProbeLimit = TimeSpan.FromSeconds(30);
     public static string DataDirectory => Path.GetFullPath(Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IDMRea"));
+    /// <summary>The copy of the extension the browser loads: kept in the data folder so it survives the app being updated or moved.</summary>
+    public static string ExtensionFolderFor(string dataFolder) => Path.Combine(Path.GetFullPath(dataFolder), "browser", "extension");
     public static string PipeName => "IDMRea." + FolderHash(DataDirectory);
     /// <summary>The app's single-instance key: one window per data folder, like the pipe and the engine lock.</summary>
     public static string InstanceKey => InstanceKeyFor(DataDirectory);

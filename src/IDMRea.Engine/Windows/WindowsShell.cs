@@ -30,14 +30,17 @@ public sealed class WindowsShell : IEngineShell, IDisposable
         downloads.JobChanged += _ => Activity();
         Activity();
         // The app folder may have moved since "Add to browser": point the browser at this copy's host again.
-        try { browser.RefreshIfOwned(BrowserHostPath, Protocol.DataDirectory, BrowserRegistration.DefaultHome); }
+        try { browser.RefreshIfOwned(BrowserHostPath, Protocol.DataDirectory, BrowserRegistration.DefaultHome, ExtensionSource); }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException) { }
     }
 
     public static string BrowserHostPath => Path.Combine(AppContext.BaseDirectory, "IDMRea.BrowserHost.exe");
 
+    /// <summary>The unpacked extension published beside the app (the engine runs from the app's <c>engine</c> folder).</summary>
+    public static string ExtensionSource => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "extension"));
+
     /// <summary>"Add to browser" in Settings: this copy's host and data folder become the browser's IDM-Rea.</summary>
-    public void RegisterBrowser() => browser.Register(BrowserHostPath, Protocol.DataDirectory, BrowserRegistration.DefaultHome);
+    public void RegisterBrowser() => browser.Register(BrowserHostPath, Protocol.DataDirectory, BrowserRegistration.DefaultHome, ExtensionSource);
 
     public void Notify(DownloadJob job)
     {

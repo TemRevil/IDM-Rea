@@ -12,7 +12,10 @@ $('status').classList.toggle('on', connected);
 $('status-text').textContent = connected ? 'Connected' : 'Not connected';
 if (!connected) {
   $('connect-hint').hidden = false;
-  $('connect-hint').textContent = 'Downloads stay in the browser until IDM-Rea is connected. In IDM-Rea, open Settings, Browser, and press "Add to browser".';
+  const detail = state?.app?.detail || '';
+  $('connect-hint').textContent = !detail || /not found/i.test(detail)
+    ? 'Downloads stay in the browser until IDM-Rea is connected. In IDM-Rea, open Settings, Browser, and press "Add to browser".'
+    : `IDM-Rea is added to this browser, but the browser could not reach it: ${detail}`;
 }
 
 // ---------- Files ----------
