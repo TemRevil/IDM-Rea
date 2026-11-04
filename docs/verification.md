@@ -4,7 +4,7 @@ Results from 2026-11-04 on Windows 11 x64 (.NET SDK 10.0.402, Intel Core 6th gen
 
 ## Tests
 
-`dotnet test tests/IDMRea.Core.Tests -c Release`: 200 passed on `net10.0` and 7 on `net10.0-windows`, none failed. Engine tests also run on Linux in CI.
+`dotnet test tests/IDMRea.Core.Tests -c Release`: 201 passed on `net10.0` and 9 on `net10.0-windows`, none failed. Engine tests also run on Linux in CI.
 
 They cover, against a local HTTP server with switchable faults:
 
@@ -17,7 +17,7 @@ They cover, against a local HTTP server with switchable faults:
 - Retries, `Retry-After`, the shared speed limit, the queue and the start-up rule.
 - The pipe protocol (versions 1 and 2, `subscribe` pushes) and a server that takes 21 s to answer a link check.
 - Settings, file names, categories, sidebar counts, search (Arabic-Indic digits search as 0-9) and the drawn icon.
-- Browser downloads: the referrer, cookies and user agent reach the server on the check and on every part; cookies are never stored in plain text and survive a restart; a download without a folder goes to its type's folder; the SHA-256 check (a match is marked verified, a mismatch fails with a plain reason and Retry downloads again).
+- Browser downloads: the referrer, cookies and user agent reach the server on the check and on every part; cookies are never stored in plain text, survive a restart, and never reach another host after a redirect; a download without a folder goes to its type's folder; the SHA-256 check (a match is marked verified, a mismatch fails with a plain reason and Retry downloads again).
 - The native host: its framing, the folder it chooses, and an `add` that goes through the engine; the registry keys and manifest "Add to browser" writes.
 - The tray menu: status line, which actions are enabled, the ticked speed limit (including one typed in Settings), and what each item does. A speed limit changed inside the engine is pushed to an open app.
 
@@ -25,7 +25,7 @@ The Recycle Bin test runs only with `IDMREA_TEST_RECYCLE=1`, because each run le
 
 ## The browser extension
 
-- `npm test` in `src/IDMRea.Extension`: 30 tests of the rules (file or page, warnings, list parsing, link candidates, sizes and checksums in the page text, the tab, redirect and layer rules). Each rule was also broken on purpose, one at a time (46 changes), and every change turned a test red.
+- `npm test` in `src/IDMRea.Extension`: 31 tests of the rules (file or page, warnings, list parsing, link candidates, sizes and checksums in the page text, the tab, redirect and layer rules). Each rule was also broken on purpose, one at a time (46 changes), and every change turned a test red.
 - `node scripts/check-extension.mjs`: Playwright's Chromium, headless, with the extension, a real native host and a real engine on their own data folder, against the fixture's trap pages. All 20 checks passed: the files found with type, size and checksum; the fake 4.2 GB installer called out; the ad link left out; the toolbar count; an invisible layer and an empty layer taken away with the link under them working; no tab from a click on empty space; only the mirror from a link to it; a fake button's ad tab closed; an ad redirect sent back; a malware-listed site blocked and "Continue anyway"; a browser download taken over, checked against the page's checksum, saved with the right bytes and gone from the browser. Breaking the layer, new-tab and redirect guards at once turned exactly those three checks red.
 
 ## The real app
