@@ -76,6 +76,15 @@ public sealed class VideoResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task AStreamYtDlpCannotDescribeIsStillOffered()
+    {
+        // A bare HLS list, as yt-dlp reports it: no codecs, no height. It may hold picture and sound.
+        const string json = """{"title": "clip", "duration": 6, "formats": [{"format_id": "0", "url": "http://127.0.0.1:9/clip.m3u8", "ext": "mp4", "protocol": "m3u8_native", "video_ext": "mp4", "audio_ext": "none"}]}""";
+        var info = await Resolver(new FakeRunner(json)).ResolveAsync("http://127.0.0.1:9/clip.m3u8", null, default);
+        Assert.Equal([new VideoChoice("0", "Video MP4", "mp4", null, null, false)], info.Choices);
+    }
+
+    [Fact]
     public async Task UnsupportedAddressSaysSoPlainly()
     {
         var runner = new FakeRunner("", exit: 1, stderr: "ERROR: Unsupported URL: https://shop.test/\n");

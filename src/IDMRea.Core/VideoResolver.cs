@@ -45,6 +45,8 @@ public sealed partial class VideoResolver(IToolRunner runner, string tempFolder,
     {
         public bool HasVideo => VCodec is { } v && v != "none";
         public bool HasAudio => ACodec is { } a && a != "none";
+        /// <summary>yt-dlp names no codec at all: it couldn't tell, and the stream may hold picture and sound.</summary>
+        public bool Undescribed => VCodec is null && ACodec is null;
         public int ProtocolRank => Protocol is "https" or "http" ? 0 : 1;
         public int CodecRank => VCodec switch
         {
@@ -129,7 +131,7 @@ public sealed partial class VideoResolver(IToolRunner runner, string tempFolder,
             root = entries.EnumerateArray().FirstOrDefault(e => e.ValueKind == JsonValueKind.Object);
         if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("formats", out var list)) throw new VideoException("IDM-Rea found no video on this page.", true);
 
-        var all = list.EnumerateArray().Select(Read).OfType<Format>().Where(f => f.Protocol != "mhtml" && (f.HasVideo || f.HasAudio)).ToList();
+        var all = list.EnumerateArray().Select(Read).OfType<Format>().Where(f => f.Protocol != "mhtml" && (f.HasVideo || f.HasAudio || f.Undescribed)).ToList();
         if (all.Count > 0 && all.All(f => f.Drm)) throw Protected();
         var formats = all.Where(f => !f.Drm && f.Protocol is "https" or "http" or "m3u8_native" or "m3u8" or "http_dash_segments").ToList();
         if (formats.Count == 0) throw new VideoException("IDM-Rea found no video on this page.", true);
@@ -147,6 +149,10 @@ public sealed partial class VideoResolver(IToolRunner runner, string tempFolder,
             else if (group.Where(f => f.HasAudio).OrderBy(f => f.ProtocolRank).ThenBy(f => f.CodecRank).ThenByDescending(f => f.Rate).FirstOrDefault() is { } both)
                 choices.Add(Describe([both]));
         }
+        // No picture with a known height (a bare HLS list, a plain file): offer the best of what there is as one choice.
+        if (choices.Count == 0 && formats.Where(f => (f.HasVideo || f.Undescribed) && f.Height is not > 0)
+                .OrderBy(f => f.ProtocolRank).ThenByDescending(f => f.Rate).FirstOrDefault() is { } plain)
+            choices.Add(Describe(plain.HasAudio || plain.Undescribed || audio.Count == 0 ? [plain] : [plain, SoundFor(plain, audio)]));
         var m4a = audio.Where(f => f.Ext == "m4a").ToList();
         if (audio.Count > 0) choices.Add(Describe([Best(m4a.Count > 0 ? m4a : audio)]));
 
@@ -171,12 +177,13 @@ public sealed partial class VideoResolver(IToolRunner runner, string tempFolder,
         var id = string.Join('+', picks.Select(p => p.Id));
         long? bytes = picks.All(p => p.Size != null) ? picks.Sum(p => p.Size!.Value) : null;
         var size = bytes is long b ? ", " + Text.Size(b) : "";
-        if (picks.Count == 1 && !picks[0].HasVideo)
+        if (picks.Count == 1 && !picks[0].HasVideo && !picks[0].Undescribed)
             return new VideoChoice(id, $"Sound only {picks[0].Ext.ToUpperInvariant()}{size}", picks[0].Ext, bytes, null, true);
         var container = picks.Count == 1 ? picks[0].Ext
             : picks[0].Ext == "mp4" && picks[1].Ext == "m4a" ? "mp4"
             : picks[0].Ext == "webm" && picks[1].Ext == "webm" ? "webm" : "mkv";
-        return new VideoChoice(id, $"{picks[0].Height}p {container.ToUpperInvariant()}{size}", container, bytes, picks[0].Height, false);
+        var height = picks[0].Height is > 0 ? picks[0].Height : null;
+        return new VideoChoice(id, $"{(height is int h ? h + "p" : "Video")} {container.ToUpperInvariant()}{size}", container, bytes, height, false);
     }
 
     private static Format? Read(JsonElement f)
