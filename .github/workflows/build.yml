@@ -13,7 +13,7 @@ jobs:
       - run: dotnet test tests/IDMRea.Core.Tests -c Release
   windows:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -25,12 +25,17 @@ jobs:
         with:
           name: IDM-Rea-windows-x64
           path: artifacts/windows/
-      - name: Run actual WinUI application and capture desktop
+      - name: Run the real WinUI app against local fixtures and check it through UI Automation
         run: ./scripts/capture-windows.ps1
         shell: pwsh
+      # Hosted runners vary a lot in disk and CPU speed, so the resource check reports but never fails the build.
+      - name: Measure CPU and memory
+        run: ./scripts/measure-resources.ps1
+        shell: pwsh
+        continue-on-error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: IDM-Rea-runtime-screenshots
+          name: IDM-Rea-screenshots-and-resources
           path: artifacts/screenshots/
           if-no-files-found: warn

@@ -63,6 +63,32 @@ public sealed class PartsTests
         Assert.Equal(8 * MiB, done.ReceivedBytes);
     }
 
+    /// <summary>
+    /// Windows zero-fills a file up to any offset written past its valid data, so a part far into a pre-sized
+    /// file would wait for that (about 10 s per 448 MB on a USB disk). A sparse part file skips it; the finished
+    /// file is no longer marked sparse.
+    /// </summary>
+    [Fact]
+    public async Task PartFileIsSparseWhileDownloadingAndNotAfter()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        await using var server = new Fixture { BodySize = 8 * MiB, Delay = 1, ChunkSize = 32 * 1024 };
+        var root = Temp(); var data = Path.Combine(root, "data");
+        string? partial = null; var sparseSeen = false;
+        await using var manager = new DownloadManager(data, new ManagerOptions(WriteFault: _ =>
+        {
+            if (partial != null && File.GetAttributes(partial).HasFlag(FileAttributes.SparseFile)) sparseSeen = true;
+            return null;
+        }));
+        var job = await manager.AddAsync(server.Url, root);
+        partial = job.PartialPath;
+        var done = await Finished(manager, job.Id);
+        Assert.Equal(DownloadStatus.Completed, done.Status);
+        Assert.True(sparseSeen, "the part file was never sparse while parts were written");
+        Assert.False(File.GetAttributes(done.Destination).HasFlag(FileAttributes.SparseFile));
+        Assert.Equal(server.Body, await File.ReadAllBytesAsync(done.Destination));
+    }
+
     [Fact]
     public async Task MultiPartResumeAfterKill()
     {

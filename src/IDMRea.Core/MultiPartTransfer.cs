@@ -28,7 +28,7 @@ public static class MultiPartTransfer
         using (var handle = File.OpenHandle(job.PartialPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, FileOptions.Asynchronous))
         {
             run.Prepare(handle);
-            try { await run.CoordinateAsync(token); }
+            try { await run.CoordinateAsync(token); SparseFile.Unmark(handle); }
             catch (Exception ex) { failure = ex; }
             if (failure is not RangesRefused) run.Checkpoint();
         }
@@ -57,6 +57,7 @@ public static class MultiPartTransfer
             var saved = Job.Parts;
             var keep = saved is { Count: > 0 } && saved.Sum(p => p.Length) == total && RandomAccess.GetLength(handle) == total;
             parts.AddRange(keep ? saved! : PartPlanner.Initial(total, settings.EffectiveParts, settings.MinPartSize));
+            SparseFile.Mark(handle);
             if (RandomAccess.GetLength(handle) != total) RandomAccess.SetLength(handle, total);
             claimed.AddRange(parts.Select(p => p.Received));
             for (var i = 0; i < parts.Count; i++) if (!parts[i].Done) pending.Enqueue(i);

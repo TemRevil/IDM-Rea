@@ -329,8 +329,7 @@ public sealed class DownloadManager : IAsyncDisposable
                     : await SingleStreamTransfer.RunAsync(job, context, token);
             }
             else job = await SingleStreamTransfer.RunAsync(job, context, token);
-            await using (var input = File.OpenRead(job.PartialPath))
-                job = job with { CompletionSha256 = Convert.ToHexString(await SHA256.HashDataAsync(input, token)), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing };
+            job = job with { CompletionSha256 = await FileHash.Sha256Async(job.PartialPath, token), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing };
             Save(job); File.Move(job.PartialPath, job.Destination, false);
             Save(job with { Status = DownloadStatus.Completed, CompletedAt = time.GetUtcNow(), Attempts = 0, Error = null });
         }

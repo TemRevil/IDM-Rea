@@ -19,6 +19,7 @@ $env:IDMREA_DATA_DIRECTORY = Join-Path $root 'artifacts\runtime-data'
 $folder = Join-Path $root 'artifacts\test-downloads'
 $captures = Join-Path $root 'artifacts\screenshots'
 New-Item -ItemType Directory -Force $folder,$captures | Out-Null
+Remove-Item (Join-Path $captures '*') -Force
 $sha = [Security.Cryptography.SHA256]::Create()
 $hash = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes([IO.Path]::GetFullPath($env:IDMREA_DATA_DIRECTORY))))).Replace('-','')
 $pipeName = 'IDMRea.' + $hash.Substring(0,20)
@@ -119,17 +120,33 @@ function Test-Downloads($app) {
  Send-Engine @{command='add'; version=2; url='http://127.0.0.1:18764/complete.bin'; folder=$folder} | Out-Null
  Send-Engine @{command='add'; version=2; url='http://127.0.0.1:18764/paused.bin'; folder=$folder; startPaused=$true} | Out-Null
  Send-Engine @{command='add'; version=2; url='http://127.0.0.1:18764/active.bin'; folder=$folder} | Out-Null
+ try { Send-Engine @{command='add'; version=2; url='http://127.0.0.1:18764/missing.bin'; folder=$folder} | Out-Null; throw 'A 404 link was accepted.' }
+ catch { if ("$_" -notlike '*no longer has this file*') { throw "A 404 link gave the wrong error: $_" } }
+ Send-Engine @{command='add'; version=2; url='http://127.0.0.1:18764/vanish.bin'; folder=$folder} | Out-Null
+ Send-Engine @{command='add'; version=2; url='http://127.0.0.1:18764/drop.bin'; folder=$folder} | Out-Null
+ # The server cuts drop.bin off once: an automatic retry must finish it whole.
+ Wait-For { $drop = @((Send-Engine @{command='list'}).jobs | Where-Object { $_.url -like '*/drop.bin' })[0]; $drop.status -eq 'Completed' -and (Get-Item $drop.destination).Length -eq 1048576 } 'drop.bin completed whole after a retry'
+ Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.url -like '*/vanish.bin' })[0].status -eq 'Failed' } 'vanish.bin failed (404 after the probe)'
+ Wait-For { $active = @((Send-Engine @{command='list'}).jobs | Where-Object { $_.url -like '*/active.bin' })[0]; $active.resumable -and @($active.parts).Count -gt 1 } 'active.bin resumable and split into parts'
  Wait-For { (Toggle $app 'complete.bin') -eq 'none' -and (Send-Engine @{command='list'}).jobs.status -contains 'Completed' } 'complete.bin with no enabled toggle'
  Wait-For { (Toggle $app 'paused.bin') -eq 'Resume' } 'paused.bin offering Resume'
  Wait-For { (Toggle $app 'active.bin') -eq 'Pause' } 'active.bin offering Pause'
  (Row $app 'active.bin').GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
  Wait-For { $pane = Find-Named $app 'Download details'; $pane -and $pane.FindFirst($scope,(New-Object System.Windows.Automation.PropertyCondition($auto::NameProperty,'Copy link'))) -and $pane.FindFirst($scope,(New-Object System.Windows.Automation.PropertyCondition($auto::NameProperty,'Show in folder'))) } 'the details pane with Copy link and Show in folder'
  Capture $app '02-downloads-details.png'
- Select-Nav $app 'Completed'
- try { Wait-For { $names = @(Listed $app); $names.Count -eq 1 -and $names[0] -eq 'complete.bin' } 'Completed showing only complete.bin' }
- catch { throw "$_ (listed: $((Listed $app) -join ', '))" }
- Capture $app '03-completed.png'
+ Test-Section $app 'Downloading' 'active.bin' '03-downloading.png'
+ Test-Section $app 'Queued and paused' 'paused.bin' '03-queued.png'
+ Test-Section $app 'Completed' 'complete.bin,drop.bin' '03-completed.png'
+ Test-Section $app 'Failed' 'vanish.bin' '03-failed.png'
  Select-Nav $app 'All downloads'
+}
+# A list section shows exactly these files (in any order).
+function Test-Section($app, $nav, $expected, $capture) {
+ Select-Nav $app $nav
+ $want = @($expected -split ',' | Sort-Object)
+ try { Wait-For { $names = @(Listed $app | Sort-Object); ($names -join ',') -eq ($want -join ',') } "$nav showing $expected" }
+ catch { throw "$_ (listed: $((Listed $app) -join ', '))" }
+ Capture $app $capture
 }
 
 # Add dialog: a link in the clipboard, Ctrl+N, the probed name and category, Start download.
@@ -149,6 +166,8 @@ function Test-AddDialog($app) {
  $start.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
  try { Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.destination -like (Join-Path $folder 'Documents\report.pdf') -and $_.status -eq 'Completed' -and $_.category -eq 'Documents' }).Count -eq 1 } 'report.pdf completed under Documents' }
  catch { Capture $app 'failed-add.png'; throw "$_ (jobs: $(((Send-Engine @{command='list'}).jobs | ForEach-Object { "$($_.destination) $($_.status) $($_.category) $($_.error)" }) -join '; '))" }
+ Test-Section $app 'Documents' 'report.pdf' '04-category-documents.png'
+ Select-Nav $app 'All downloads'
 }
 
 # Settings: digits typed on an Arabic keyboard, clamping, Ultra locking parts, theme and downloads at once reaching the engine.
@@ -223,6 +242,8 @@ try {
  # Closing the window must leave the engine downloading.
  Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.status -eq 'Downloading' }).Count -gt 0 } 'an active transfer'
  [void]$app.CloseMainWindow(); $app.WaitForExit(10000) | Out-Null
+ if (!$app.HasExited) { throw 'The app did not exit when its window closed.' }
+ if (!(Get-Process IDMRea.Engine -ErrorAction SilentlyContinue)) { throw 'The engine (and its tray icon) stopped when the window closed.' }
  $before = (Send-Engine @{command='list'}).jobs | Where-Object { $_.status -eq 'Downloading' } | Select-Object -First 1
  Start-Sleep -Seconds 1
  $after = (Send-Engine @{command='list'}).jobs | Where-Object { $_.id -eq $before.id }
