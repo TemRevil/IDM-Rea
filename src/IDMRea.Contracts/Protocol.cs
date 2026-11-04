@@ -5,8 +5,11 @@ using System.Text.Json.Serialization;
 
 namespace IDMRea.Contracts;
 
+/// <param name="MaxRequestBytes">The most one request may ask for (video servers slow down larger ones).</param>
+/// <param name="FixedFile">The address names one unchanging file (a video stream), so its size identifies it and no validator is needed.</param>
 public sealed record ProbeResult(string Url, string ResolvedUrl, string FileName, long? TotalBytes,
-    string? ETag, DateTimeOffset? LastModified, string? ContentType, Category Category, bool Resumable);
+    string? ETag, DateTimeOffset? LastModified, string? ContentType, Category Category, bool Resumable,
+    long? MaxRequestBytes = null, bool FixedFile = false);
 
 public sealed record EngineTotals(int Active, long BytesPerSecond);
 

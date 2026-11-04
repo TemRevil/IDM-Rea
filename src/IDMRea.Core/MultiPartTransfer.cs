@@ -17,7 +17,8 @@ public static class MultiPartTransfer
     private const int Reconnects = 3;
 
     private sealed class RangesRefused() : Exception("The server ignored the range of a part.");
-    private enum Outcome { Done, Busy }
+    /// <summary>More: a capped request ended at its cap and the part continues with the next request.</summary>
+    private enum Outcome { Done, Busy, More }
 
     /// <summary>Returns the job with every part complete and <c>ReceivedBytes == TotalBytes</c>, before hashing.</summary>
     public static async Task<DownloadJob> RunAsync(DownloadJob job, ProbeResult probe, TransferContext ctx, CancellationToken token)
@@ -137,9 +138,9 @@ public static class MultiPartTransfer
         private static bool Dropped(Exception ex) =>
             ex is not TransferException and not RangesRefused && RetryPolicy.Classify(ex) is ErrorKind.Network or ErrorKind.Timeout;
 
-        private bool SameEntity(HttpResponseMessage response) => strong
+        private bool SameEntity(HttpResponseMessage response) => probe.FixedFile || (strong
             ? response.Headers.ETag is { IsWeak: false } tag && tag.ToString() == probe.ETag
-            : probe.LastModified != null && response.Content.Headers.LastModified == probe.LastModified;
+            : probe.LastModified != null && response.Content.Headers.LastModified == probe.LastModified);
 
         private async Task<(Outcome, TransferException?)> PartAsync(int index, CancellationToken token)
         {
@@ -149,7 +150,12 @@ public static class MultiPartTransfer
             {
                 for (var attempt = 0; ; attempt++)
                 {
-                    try { return await ConnectAsync(index, buffer, token); }
+                    try
+                    {
+                        var outcome = await ConnectAsync(index, buffer, token);
+                        if (outcome.Item1 != Outcome.More) return outcome;
+                        attempt = -1; // a finished chunk is progress, not a failed attempt
+                    }
                     catch (Exception ex) when (attempt < Reconnects && !token.IsCancellationRequested && Dropped(ex))
                     { await Task.Delay(TimeSpan.FromSeconds(1), token); }
                 }
@@ -162,11 +168,13 @@ public static class MultiPartTransfer
             long from, to;
             lock (gate) { claimed[index] = parts[index].Received; from = parts[index].Start + parts[index].Received; to = parts[index].End; }
             if (from > to) return (Outcome.Done, null);
+            if (probe.MaxRequestBytes is > 0 and long cap) to = Math.Min(to, from + cap - 1);
             using var request = new HttpRequestMessage(HttpMethod.Get, probe.ResolvedUrl);
             request.Headers.AcceptEncoding.ParseAdd("identity");
             request.Headers.Range = new RangeHeaderValue(from, to);
             ctx.Headers.ApplyTo(request);
-            request.Headers.IfRange = strong ? new RangeConditionHeaderValue(EntityTagHeaderValue.Parse(probe.ETag!)) : new RangeConditionHeaderValue(probe.LastModified!.Value);
+            if (!probe.FixedFile)
+                request.Headers.IfRange = strong ? new RangeConditionHeaderValue(EntityTagHeaderValue.Parse(probe.ETag!)) : new RangeConditionHeaderValue(probe.LastModified!.Value);
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(token); idle.CancelAfter(TimeSpan.FromSeconds(45));
             using var response = await ctx.Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, idle.Token);
             if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable) return (Outcome.Busy, TransferException.FromResponse(response));
@@ -185,7 +193,12 @@ public static class MultiPartTransfer
                 long at; int take; bool shrunk;
                 lock (gate)
                 {
-                    if (read == 0) { if (parts[index].Done) return (Outcome.Done, null); break; }
+                    if (read == 0)
+                    {
+                        if (parts[index].Done) return (Outcome.Done, null);
+                        if (parts[index].Start + parts[index].Received > to) return (Outcome.More, null); // the capped request is complete
+                        break;
+                    }
                     var part = parts[index]; shrunk = part.End < to;
                     at = part.Start + claimed[index]; take = (int)Math.Min(read, part.End - at + 1); claimed[index] += take;
                 }
