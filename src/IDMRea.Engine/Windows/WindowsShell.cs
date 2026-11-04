@@ -49,7 +49,8 @@ public sealed class WindowsShell : IEngineShell, IDisposable
     public void SettingsChanged(EngineSettings next)
     {
         settings = next;
-        try { if (Environment.ProcessPath is { } exe) startup.Set(next.StartWithWindows, exe); }
+        var folder = string.Equals(Protocol.DataDirectory, Path.GetFullPath(BrowserRegistration.DefaultHome), StringComparison.OrdinalIgnoreCase) ? null : Protocol.DataDirectory;
+        try { if (Environment.ProcessPath is { } exe) startup.Set(next.StartWithWindows, exe, folder); }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException) { }
     }
 

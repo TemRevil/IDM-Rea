@@ -46,7 +46,8 @@ public sealed class DownloadManager : IAsyncDisposable
         settings = store.LoadSettings();
         slots = new(settings.DownloadsAtOnce);
         limiter.BytesPerSecond = settings.SpeedLimitBytesPerSecond;
-        http = new(this.options.Handler ?? new SocketsHttpHandler { UseCookies = false, AutomaticDecompression = DecompressionMethods.None, ConnectTimeout = TimeSpan.FromSeconds(30), MaxAutomaticRedirections = 10 })
+        // Redirects are followed by RedirectHandler, so a browser download's cookies never reach another host.
+        http = new(this.options.Handler ?? new RedirectHandler(new SocketsHttpHandler { UseCookies = false, AllowAutoRedirect = false, AutomaticDecompression = DecompressionMethods.None, ConnectTimeout = TimeSpan.FromSeconds(30) }))
         { Timeout = Timeout.InfiniteTimeSpan };
 
         var start = new List<Guid>(); var wait = new List<DownloadJob>();
@@ -107,7 +108,7 @@ public sealed class DownloadManager : IAsyncDisposable
     private RequestHeaders? HeadersFor(DownloadJob job)
     {
         string? cookie; lock (gate) cookies.TryGetValue(job.Id, out cookie);
-        var headers = new RequestHeaders(job.Referrer, cookie ?? CookieVault.Unprotect(job.ProtectedCookies), job.UserAgent);
+        var headers = new RequestHeaders(job.Referrer, cookie ?? CookieVault.Unprotect(job.ProtectedCookies), job.UserAgent, job.Url);
         return headers.IsEmpty ? null : headers;
     }
 

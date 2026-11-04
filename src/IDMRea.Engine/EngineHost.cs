@@ -119,7 +119,7 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
             case "probe": probe = await manager.ProbeAsync(request.Url ?? throw new ArgumentException("Missing URL."), token); break;
             case "add":
                 await manager.AddAsync(request.Url ?? "", request.Folder, request.FileName, request.StartPaused,
-                    new RequestHeaders(request.Referrer, request.Cookies, request.UserAgent), request.ExpectedSha256);
+                    new RequestHeaders(request.Referrer, request.Cookies, request.UserAgent, request.Url), request.ExpectedSha256);
                 break;
             case "pause": foreach (var id in Targets()) await manager.ControlAsync(id); break;
             case "resume": foreach (var id in Targets()) await manager.ControlAsync(id, resume: true); break;

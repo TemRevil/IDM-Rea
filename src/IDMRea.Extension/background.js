@@ -43,6 +43,7 @@ async function updateLists() {
   }
   if (fetched) next.updated = Date.now();
   await chrome.storage.local.set({ lists: next }); // storage.onChanged reloads the sets and the blocking rules
+  if (fetched < LISTS.length) chrome.alarms.create('lists-retry', { delayInMinutes: 30 }); // offline, or a list moved
   return fetched === LISTS.length;
 }
 
@@ -80,7 +81,7 @@ chrome.runtime.onStartup.addListener(async () => {
   await ready;
   if (Date.now() - listsUpdated > DAY_MS) updateLists();
 });
-chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === 'lists') updateLists(); });
+chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === 'lists' || alarm.name === 'lists-retry') updateLists(); });
 
 // ---------- IDM-Rea (native host) ----------
 

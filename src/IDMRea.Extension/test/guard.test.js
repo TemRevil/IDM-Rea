@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DomainSet } from '../lib/lists.js';
-import { CLICK_WINDOW_MS, clickCatcher, newTabVerdict, redirectVerdict } from '../lib/guard.js';
+import { CLICK_WINDOW_MS, MENU_WINDOW_MS, clickCatcher, newTabVerdict, redirectVerdict } from '../lib/guard.js';
 
 const lists = {
   malware: new DomainSet(['malware.example']),
@@ -39,6 +39,12 @@ test('a button may open another site unless it is an ad network', () => {
 test('a click older than the window does not count', () => {
   assert.equal(tab('https://mediafire.com/f', click('link', 'https://mediafire.com/f', CLICK_WINDOW_MS + 1)), 'close');
   assert.equal(tab('https://mediafire.com/f', click('link', 'https://mediafire.com/f', CLICK_WINDOW_MS)), 'allow');
+});
+
+test('a link opened from its right-click menu may take its time', () => {
+  assert.equal(tab('https://mediafire.com/f', click('menu', 'https://www.mediafire.com/f', 20_000)), 'allow');
+  assert.equal(tab('https://somewhere.example/', click('menu', 'https://www.mediafire.com/f', 20_000)), 'close');
+  assert.equal(tab('https://mediafire.com/f', click('menu', 'https://www.mediafire.com/f', MENU_WINDOW_MS + 1)), 'close');
 });
 
 test('the same site may open its own tabs', () => {

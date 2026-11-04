@@ -57,6 +57,12 @@
 
   addEventListener('pointerdown', onPointerDown, true);
   addEventListener('click', onClick, true);
+  // A link's right-click menu can open it in a new tab well after the press.
+  addEventListener('contextmenu', (event) => {
+    if (!event.isTrusted || ours(event)) return;
+    const { kind, href } = pressed(event);
+    if (kind === 'link') send({ type: 'click', kind: 'menu', href });
+  }, true);
   addEventListener('auxclick', (event) => { if (event.isTrusted && !ours(event)) { const { kind, href } = pressed(event); send({ type: 'click', kind, href }); } }, true);
 
   /** Clicks the link or button the person meant, telling both guards it was theirs. */

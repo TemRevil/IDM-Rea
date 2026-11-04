@@ -2,6 +2,9 @@ using IDMRea.Contracts;
 using IDMRea.Core;
 using IDMRea.Engine;
 
+// The start-up entry names the data folder when it isn't the default (see StartupRegistration).
+if (Array.IndexOf(args, "--data-directory") is var at and >= 0 && at + 1 < args.Length)
+    Environment.SetEnvironmentVariable("IDMREA_DATA_DIRECTORY", args[at + 1]);
 Directory.CreateDirectory(Protocol.DataDirectory);
 FileStream ownership;
 try { ownership = new FileStream(Path.Combine(Protocol.DataDirectory, "engine.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }

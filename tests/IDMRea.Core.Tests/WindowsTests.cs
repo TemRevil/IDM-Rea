@@ -56,6 +56,40 @@ public sealed class WindowsTests
         finally { Registry.CurrentUser.DeleteSubKeyTree(@"Software\IDMRea-Tests", false); }
     }
 
+    [Fact]
+    public void StartupEntryNamesADataFolderOtherThanTheDefault()
+    {
+        const string key = @"Software\IDMRea-Tests\Run";
+        var startup = new StartupRegistration(key, "IDM-Rea");
+        try
+        {
+            startup.Set(true, @"C:\Apps\engine\IDMRea.Engine.exe", @"G:\Data\IDMRea");
+            using var run = Registry.CurrentUser.OpenSubKey(key);
+            Assert.Equal(@"""C:\Apps\engine\IDMRea.Engine.exe"" --tray --data-directory ""G:\Data\IDMRea""", run?.GetValue("IDM-Rea"));
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(@"Software\IDMRea-Tests", false); }
+    }
+
+    [Fact]
+    public void AnEngineOnlyRemovesItsOwnStartupEntry()
+    {
+        const string key = @"Software\IDMRea-Tests\Run";
+        var startup = new StartupRegistration(key, "IDM-Rea");
+        object? Value() { using var run = Registry.CurrentUser.OpenSubKey(key); return run?.GetValue("IDM-Rea"); }
+        const string exe = @"C:\Apps\engine\IDMRea.Engine.exe";
+        try
+        {
+            startup.Set(true, exe, @"G:\Data\IDMRea");
+            startup.Set(false, exe, @"G:\Test\capture-data");   // a test engine on another folder
+            startup.Set(false, exe);                            // the default folder's engine
+            startup.Set(false, @"D:\Other\engine\IDMRea.Engine.exe", @"G:\Data\IDMRea");
+            Assert.NotNull(Value());
+            startup.Set(false, exe, @"g:\data\idmrea");
+            Assert.Null(Value());
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(@"Software\IDMRea-Tests", false); }
+    }
+
     /// <summary>Each run leaves its test file in the real Recycle Bin, so it runs only where that is wanted (CI sets
     /// IDMREA_TEST_RECYCLE=1).</summary>
     [Fact]

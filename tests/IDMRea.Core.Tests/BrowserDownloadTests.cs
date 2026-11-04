@@ -36,6 +36,42 @@ public sealed class BrowserDownloadTests
         Assert.All(server.RequestHeaders, AssertBrowserHeaders);
     }
 
+    /// <summary>Answers every request on "localhost" with a redirect to <paramref name="target"/>.</summary>
+    private static async Task Redirect(System.Net.Sockets.TcpListener listener, string target, CancellationToken stop)
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            System.Net.Sockets.TcpClient client;
+            try { client = await listener.AcceptTcpClientAsync(stop); } catch (OperationCanceledException) { return; }
+            _ = Task.Run(async () =>
+            {
+                using var _ = client; var stream = client.GetStream(); var buffer = new byte[8192]; var text = "";
+                while (!text.Contains("\r\n\r\n")) { var n = await stream.ReadAsync(buffer); if (n == 0) return; text += Encoding.ASCII.GetString(buffer, 0, n); }
+                await stream.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.1 302 Found\r\nLocation: {target}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
+            });
+        }
+    }
+
+    [Fact]
+    public async Task CookiesNeverFollowARedirectToAnotherHost()
+    {
+        await using var other = new Fixture(); var dir = Temp();
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0); listener.Start();
+        using var stop = new CancellationTokenSource();
+        var redirecting = Redirect(listener, other.Url, stop.Token);
+        try
+        {
+            await using var manager = new DownloadManager(Path.Combine(dir, "data"));
+            var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+            var job = await manager.AddAsync($"http://localhost:{port}/file.bin", dir, headers: Browser);
+            var done = await Wait(manager, job.Id, DownloadStatus.Completed, DownloadStatus.Failed);
+            Assert.Equal(DownloadStatus.Completed, done.Status);
+            Assert.NotEmpty(other.RequestHeaders);
+            Assert.All(other.RequestHeaders, h => Assert.False(h.ContainsKey("Cookie"), "the site's cookies reached another host"));
+        }
+        finally { stop.Cancel(); listener.Stop(); await redirecting; }
+    }
+
     [Fact]
     public async Task CookiesAreNotStoredInPlainTextAndSurviveARestart()
     {

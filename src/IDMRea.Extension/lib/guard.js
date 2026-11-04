@@ -3,12 +3,15 @@ import { hostOf, sameSite } from './sites.js';
 
 /** A click counts for what opens or loads within this long after it. */
 export const CLICK_WINDOW_MS = 1500;
+/** A link's right-click menu: choosing "Open link in new tab" may take a while. */
+export const MENU_WINDOW_MS = 60_000;
 
 const isAdNetwork = (lists, host) => Boolean(lists.popups?.has(host) || lists.ads?.has(host));
-const recentClick = (click, now) => (click && now - click.at <= CLICK_WINDOW_MS ? click : null);
+const recentClick = (click, now) => (click && now - click.at <= (click.kind === 'menu' ? MENU_WINDOW_MS : CLICK_WINDOW_MS) ? click : null);
 
 /**
- * A tab a page opened. click is the last click the page reported ({kind: 'link' | 'button' | 'empty', href, at}) or null.
+ * A tab a page opened. click is the last click the page reported ({kind: 'link' | 'button' | 'empty' | 'menu', href, at})
+ * or null; 'menu' is a right-click on a link.
  * 'allow', 'close', or 'wait' while the tab has no web address yet.
  */
 export function newTabVerdict({ sourceUrl, targetUrl, click, now, lists = {} }) {
