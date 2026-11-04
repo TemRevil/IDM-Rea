@@ -117,6 +117,7 @@ public sealed class DownloadManager : IAsyncDisposable
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) throw new ArgumentException("Use an absolute HTTP or HTTPS URL.");
         if (folder != null && !Path.IsPathFullyQualified(folder)) throw new ArgumentException("Use an absolute destination folder.");
         if (headers?.IsEmpty == true) headers = null;
+        if (expectedSha256 != null) expectedSha256 = Checksum.Normalize(expectedSha256);
         var probe = await ProbeAsync(uri.AbsoluteUri, default, headers);
         folder ??= Settings.FolderFor(probe.Category);
         await controls.WaitAsync();
@@ -131,7 +132,8 @@ public sealed class DownloadManager : IAsyncDisposable
                 startPaused ? DownloadStatus.Paused : DownloadStatus.Queued, TotalBytes: probe.TotalBytes, ETag: probe.ETag,
                 LastModified: probe.LastModified, Category: probe.Category, CreatedAt: time.GetUtcNow(),
                 PausedBy: startPaused ? PausedBy.Person : PausedBy.None, Resumable: probe.Resumable, ResolvedUrl: probe.ResolvedUrl,
-                Referrer: headers?.Referrer, UserAgent: headers?.UserAgent, ProtectedCookies: CookieVault.Protect(headers?.Cookies)));
+                Referrer: headers?.Referrer, UserAgent: headers?.UserAgent, ProtectedCookies: CookieVault.Protect(headers?.Cookies),
+                ExpectedSha256: expectedSha256));
             if (!string.IsNullOrEmpty(headers?.Cookies)) lock (gate) cookies[id] = headers.Cookies;
             if (!startPaused) { lock (gate) probes[id] = probe; Start(id); }
             return Get(id);
@@ -237,7 +239,8 @@ public sealed class DownloadManager : IAsyncDisposable
 
     private void PrepareRetry(DownloadJob job)
     {
-        var canResume = job.ErrorKind != ErrorKind.Changed && File.Exists(job.PartialPath)
+        // A changed file or one that failed its checksum is downloaded again from the start.
+        var canResume = job.ErrorKind is not (ErrorKind.Changed or ErrorKind.ChecksumMismatch) && File.Exists(job.PartialPath)
             && (job.Parts is { Count: > 0 } || job.ReceivedBytes > 0)
             && (job.Resumable || SingleStreamTransfer.Strong(job.ETag) || job.LastModified != null);
         if (!canResume)
@@ -245,7 +248,7 @@ public sealed class DownloadManager : IAsyncDisposable
             if (File.Exists(job.PartialPath)) File.Delete(job.PartialPath);
             job = job with { ReceivedBytes = 0, Parts = null, TotalBytes = null, ETag = null, LastModified = null, CompletionFileId = null };
         }
-        Save(job with { Attempts = 0 });
+        Save(job with { Attempts = 0, Verified = false });
     }
 
     private static void EnsureDestinationFree(DownloadJob job)
@@ -361,7 +364,15 @@ public sealed class DownloadManager : IAsyncDisposable
                     : await SingleStreamTransfer.RunAsync(job, context, token);
             }
             else job = await SingleStreamTransfer.RunAsync(job, context, token);
-            job = job with { CompletionFileId = FileIdentity.Of(job.PartialPath), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing };
+            // A checksum from the site is checked before the file gets its name, so a wrong file is never published.
+            var verified = false;
+            if (job.ExpectedSha256 is { } expected)
+            {
+                if (await Checksum.Sha256Async(job.PartialPath, token) != expected)
+                    throw new TransferException(ErrorKind.ChecksumMismatch, Text.Describe(ErrorKind.ChecksumMismatch, null));
+                verified = true;
+            }
+            job = job with { CompletionFileId = FileIdentity.Of(job.PartialPath), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing, Verified = verified };
             ZoneMark.Write(job.PartialPath, job.Url); // the stream moves with the file
             Save(job); File.Move(job.PartialPath, job.Destination, false);
             Save(job with { Status = DownloadStatus.Completed, CompletedAt = time.GetUtcNow(), Attempts = 0, Error = null });

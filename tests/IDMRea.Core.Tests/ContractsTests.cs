@@ -6,6 +6,19 @@ namespace IDMRea.Tests;
 public sealed class ContractsTests
 {
     [Fact]
+    public void BrowserSettingsDefaultAndClamp()
+    {
+        var settings = new EngineSettings();
+        Assert.True(settings.BrowserTakeover);
+        Assert.Equal(1024 * 1024, settings.BrowserMinBytes);
+        Assert.Equal(0, (settings with { BrowserMinBytes = -5 }).Clamped().BrowserMinBytes);
+        Assert.Equal(1024L * 1024 * 1024, (settings with { BrowserMinBytes = long.MaxValue }).Clamped().BrowserMinBytes);
+        var json = JsonSerializer.Serialize(settings with { BrowserTakeover = false }, Protocol.Json);
+        Assert.False(JsonSerializer.Deserialize<EngineSettings>(json, Protocol.Json)!.BrowserTakeover);
+        Assert.True(JsonSerializer.Deserialize<EngineSettings>("{}", Protocol.Json)!.BrowserTakeover);
+    }
+
+    [Fact]
     public void EachDataFolderHasItsOwnAppWindow()
     {
         // A second copy run on another data folder (a test run, say) must not hand its launch to the first window.

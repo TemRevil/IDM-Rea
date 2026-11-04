@@ -67,6 +67,7 @@ public static class Text
         ErrorKind.AccessDenied => "Can't write to the save folder.",
         ErrorKind.NameTaken => "Another file now has this name, so it was left alone. Move or rename it, then retry.",
         ErrorKind.Lost => "The finished file went missing before it was saved. Retry to download it again.",
+        ErrorKind.ChecksumMismatch => "The file doesn't match the checksum on the site. Retry to download it again.",
         _ => "Something went wrong.",
     };
 

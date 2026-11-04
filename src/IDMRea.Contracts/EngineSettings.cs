@@ -8,7 +8,8 @@ public enum AppTheme { System, Light, Dark }
 public sealed record EngineSettings(int DownloadsAtOnce = 3, int PartsPerFile = 8, long SpeedLimitBytesPerSecond = 0,
     int RetryAttempts = 5, bool UltraPerformance = false, CloseBehavior OnClose = CloseBehavior.KeepInTray,
     bool StartWithWindows = false, bool NotifyOnComplete = true, bool NotifyOnFailure = true,
-    AppTheme Theme = AppTheme.System, IReadOnlyDictionary<Category, string>? Folders = null)
+    AppTheme Theme = AppTheme.System, IReadOnlyDictionary<Category, string>? Folders = null,
+    bool BrowserTakeover = true, long BrowserMinBytes = 1024 * 1024)
 {
     public EngineSettings Clamped() => this with
     {
@@ -16,6 +17,7 @@ public sealed record EngineSettings(int DownloadsAtOnce = 3, int PartsPerFile = 
         PartsPerFile = Math.Clamp(PartsPerFile, 1, 16),
         RetryAttempts = Math.Clamp(RetryAttempts, 0, 10),
         SpeedLimitBytesPerSecond = Math.Max(0, SpeedLimitBytesPerSecond),
+        BrowserMinBytes = Math.Clamp(BrowserMinBytes, 0, 1024L * 1024 * 1024),
     };
 
     /// <summary>Parts per file in use: Ultra performance fixes it at 16.</summary>

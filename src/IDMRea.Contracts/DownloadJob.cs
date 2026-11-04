@@ -7,7 +7,7 @@ public enum DownloadStatus { Queued, Downloading, Paused, Finalizing, Completed,
 /// <summary>Who paused a job: the person (stays paused on restart) or the engine shutting down (continues on restart).</summary>
 public enum PausedBy { None, Person, Engine }
 
-public enum ErrorKind { None, Network, Timeout, Server, RateLimited, ClientError, Changed, DiskFull, AccessDenied, Other, NameTaken, Lost }
+public enum ErrorKind { None, Network, Timeout, Server, RateLimited, ClientError, Changed, DiskFull, AccessDenied, Other, NameTaken, Lost, ChecksumMismatch }
 
 /// <summary>One byte range of a multi-part download. <see cref="End"/> is inclusive; <see cref="Received"/> counts from <see cref="Start"/>.</summary>
 public sealed record DownloadPart(long Start, long End, long Received)
@@ -24,7 +24,8 @@ public sealed record DownloadJob(Guid Id, string Url, string Destination, string
     Category Category = Category.Other, DateTimeOffset CreatedAt = default, DateTimeOffset? CompletedAt = null,
     int Attempts = 0, DateTimeOffset? NextRetryAt = null, ErrorKind ErrorKind = ErrorKind.None, int? HttpStatus = null,
     IReadOnlyList<DownloadPart>? Parts = null, PausedBy PausedBy = PausedBy.None, bool Resumable = false,
-    string? ResolvedUrl = null, string? Referrer = null, string? UserAgent = null, string? ProtectedCookies = null)
+    string? ResolvedUrl = null, string? Referrer = null, string? UserAgent = null, string? ProtectedCookies = null,
+    string? ExpectedSha256 = null, bool Verified = false)
 {
     [JsonIgnore] public string FileName => Path.GetFileName(Destination);
 }
