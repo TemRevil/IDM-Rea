@@ -66,6 +66,16 @@ function Capture($app, $name) {
   $bitmap.Save((Join-Path $captures $name),[Drawing.Imaging.ImageFormat]::Png)
  } finally { $bitmap.Dispose() }
 }
+# Every category folder points into artifacts\test-downloads so no test file lands in the real Downloads folder.
+function Use-TestFolders {
+ $settings = (Send-Engine @{command='getSettings'; version=2}).settings
+ $folders = @{}
+ foreach ($c in 'Video','Music','Documents','Programs','Archives','Images','Other') { $folders[$c] = Join-Path $folder $c }
+ $settings | Add-Member -NotePropertyName folders -NotePropertyValue $folders -Force
+ Send-Engine @{command='setSettings'; version=2; settings=$settings} | Out-Null
+ $back = (Send-Engine @{command='getSettings'; version=2}).settings.folders
+ if ($back.Documents -ne (Join-Path $folder 'Documents')) { throw 'Test folders were not applied.' }
+}
 function Set-Theme($theme) {
  $settings = (Send-Engine @{command='getSettings'; version=2}).settings
  $settings.theme = $theme
@@ -137,7 +147,52 @@ function Test-AddDialog($app) {
  $start = Find-Named $app 'Start download'
  Wait-For { $start.Current.IsEnabled } 'Start download enabled'
  $start.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
- Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.destination -like '*report.pdf' -and $_.status -eq 'Completed' -and $_.category -eq 'Documents' }).Count -eq 1 } 'report.pdf completed under Documents'
+ try { Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.destination -like (Join-Path $folder 'Documents\report.pdf') -and $_.status -eq 'Completed' -and $_.category -eq 'Documents' }).Count -eq 1 } 'report.pdf completed under Documents' }
+ catch { Capture $app 'failed-add.png'; throw "$_ (jobs: $(((Send-Engine @{command='list'}).jobs | ForEach-Object { "$($_.destination) $($_.status) $($_.category) $($_.error)" }) -join '; '))" }
+}
+
+# Settings: digits typed on an Arabic keyboard, clamping, Ultra locking parts, theme and downloads at once reaching the engine.
+function Value($element) { return $element.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value }
+function Commit-Field($app, $name, $text) {
+ $field = Find-Named $app $name
+ if (!$field) { Capture $app 'failed-settings.png'; throw "No field named $name" }
+ $field.SetFocus()
+ $field.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($text)
+ $other = if ($name -eq 'Auto-retry attempts') { 'Downloads at once' } else { 'Auto-retry attempts' }
+ $away = Find-Named $app $other
+ if (!$away) { Capture $app 'failed-settings.png'; throw "No field named $other" }
+ $away.SetFocus()
+}
+function Choose($app, $combo, $item) {
+ $box = Find-Named $app $combo
+ $box.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+ Wait-For { Find-Named $app $item } "the $item option"
+ (Find-Named $app $item).GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ $box.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
+ Start-Sleep -Milliseconds 400
+}
+function Test-Settings($app) {
+ Select-Nav $app 'Settings'
+ Wait-For { Find-Named $app 'Parts per file' } 'the Settings page'
+ $arabic = [string][char]0x0662 + [char]0x0660
+ Commit-Field $app 'Parts per file' $arabic
+ Wait-For { (Value (Find-Named $app 'Parts per file')) -eq '16' -and (Send-Engine @{command='getSettings'}).settings.partsPerFile -eq 16 } 'Parts per file clamped to 16'
+ $ultra = Find-Named $app 'Ultra performance'
+ if ($ultra.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -ne 'On') { $ultra.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle() }
+ Wait-For { (Find-Named $app 'Parts per file: 16') -and -not (Find-Named $app 'Parts per file') -and (Send-Engine @{command='getSettings'}).settings.ultraPerformance } 'Parts per file shown as 16 and not editable under Ultra performance'
+ Commit-Field $app 'Downloads at once' '1'
+ Wait-For { (Send-Engine @{command='getSettings'}).settings.downloadsAtOnce -eq 1 } 'Downloads at once = 1 in the engine'
+ Choose $app 'Theme' 'Light'
+ Wait-For { (Send-Engine @{command='getSettings'}).settings.theme -eq 'Light' } 'Theme Light in the engine'
+ Capture $app '05-settings-light.png'
+ Choose $app 'Theme' 'Dark'
+ Wait-For { (Send-Engine @{command='getSettings'}).settings.theme -eq 'Dark' } 'Theme Dark in the engine'
+ Capture $app '05-settings-dark.png'
+ $ultra.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+ Wait-For { $parts = Find-Named $app 'Parts per file'; $parts.Current.IsEnabled -and (Value $parts) -eq '16' } 'Parts per file back to 16 and editable'
+ Choose $app 'Theme' 'System'
+ Commit-Field $app 'Downloads at once' '3'
+ Select-Nav $app 'All downloads'
 }
 
 # Start from an empty list: stop any engine on the test data folder and clear it.
@@ -157,11 +212,13 @@ try {
  Wait-For { $app.Refresh(); if ($app.HasExited) { throw "WinUI process exited with code $($app.ExitCode)" }; $app.MainWindowHandle -ne 0 } 'the WinUI window'
  try { Wait-For { try { Test-Shell $app; $true } catch { $false } } 'the app shell' 15 } catch { }
  Test-Shell $app
+ Use-TestFolders
  Set-Theme 'Dark'; Capture $app '01-shell-dark.png'
  Set-Theme 'Light'; Capture $app '01-shell-light.png'
  Set-Theme 'System'
  Test-Downloads $app
  Test-AddDialog $app
+ Test-Settings $app
 
  # Closing the window must leave the engine downloading.
  Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.status -eq 'Downloading' }).Count -gt 0 } 'an active transfer'

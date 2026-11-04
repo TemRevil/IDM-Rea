@@ -174,7 +174,7 @@ public sealed partial class MainWindow : Window
     private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (args.SelectedItem is not NavigationViewItem { Tag: string tag }) return;
-        if (tag == "settings") return;
+        if (tag == "settings") { if (ContentFrame.Content is not SettingsPage) ContentFrame.Navigate(typeof(SettingsPage)); return; }
         State.Filter = tag;
         if (ContentFrame.Content is not DownloadsPage) ContentFrame.Navigate(typeof(DownloadsPage));
     }
