@@ -12,10 +12,12 @@ $('status').classList.toggle('on', connected);
 $('status-text').textContent = connected ? 'Connected' : 'Not connected';
 if (!connected) {
   $('connect-hint').hidden = false;
-  const detail = state?.app?.detail || '';
-  $('connect-hint').textContent = !detail || /not found/i.test(detail)
-    ? 'Downloads stay in the browser until IDM-Rea is connected. In IDM-Rea, open Settings, Browser, and press "Add to browser".'
-    : `IDM-Rea is added to this browser, but the browser could not reach it: ${detail}`;
+  // The reason is always shown: the browser's own words when it can't start IDM-Rea, else IDM-Rea's answer.
+  const app = state?.app || {};
+  const reason = app.connected === false ? app.detail || '' : app.error || 'no answer';
+  $('connect-hint').textContent = app.connected === false && (!reason || /not found/i.test(reason))
+    ? `Downloads stay in the browser until IDM-Rea is connected. In IDM-Rea, open Settings, Browser, and press "Add to browser".${reason ? ` (Browser says: ${reason})` : ''}`
+    : `IDM-Rea is added to this browser, but it did not answer: ${reason}`;
 }
 
 // ---------- Files ----------
