@@ -33,10 +33,11 @@ public sealed class RegressionTests
         await using var manager = new DownloadManager(Path.Combine(root, "data"));
         var job = await manager.AddAsync(server.Url, root);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        while (server.RequestCount == 0) await Task.Delay(10, deadline.Token);
+        while (manager.Snapshot().Single().ReceivedBytes == 0) await Task.Delay(10, deadline.Token);
+        var requests = server.RequestCount;
         await manager.ControlAsync(job.Id, resume: true);
         await Task.Delay(100);
-        Assert.Equal(1, server.RequestCount);
+        Assert.Equal(requests, server.RequestCount);
     }
 
     [Fact]

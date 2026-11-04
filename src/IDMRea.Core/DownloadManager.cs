@@ -12,10 +12,14 @@ public sealed class DownloadManager : IAsyncDisposable
     private readonly SemaphoreSlim controls = new(1);
     private readonly SemaphoreSlim slots = new(3);
     private readonly object gate = new();
+    private readonly EngineSettings settings;
+    private readonly RateLimiter limiter = new();
+    private readonly SpeedMeter meter = new();
     private readonly HttpClient http = new(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.None, ConnectTimeout = TimeSpan.FromSeconds(30), MaxAutomaticRedirections = 10 }) { Timeout = Timeout.InfiniteTimeSpan };
     public DownloadManager(string directory)
     {
         store = new(directory);
+        settings = store.LoadSettings(); limiter.BytesPerSecond = settings.SpeedLimitBytesPerSecond;
         foreach (var original in store.Load())
         {
             var job = original;
@@ -46,7 +50,7 @@ public sealed class DownloadManager : IAsyncDisposable
     }
     private void Start(Guid id)
     {
-        Save(Get(id) with { Status = DownloadStatus.Queued, Error = null });
+        Save(Get(id) with { Status = DownloadStatus.Queued, Error = null, ErrorKind = ErrorKind.None, HttpStatus = null });
         var cancel = new CancellationTokenSource();
         workers[id] = (cancel, Task.Run(() => TransferAsync(id, cancel.Token)));
     }
@@ -68,13 +72,15 @@ public sealed class DownloadManager : IAsyncDisposable
             if (workers.Remove(id, out var worker)) { worker.Cancel.Cancel(); await worker.Task; worker.Cancel.Dispose(); }
             job = Get(id);
             if (job.Status == DownloadStatus.Completed) return;
-            if (cancel) { File.Delete(job.PartialPath); Save(job with { Status = DownloadStatus.Cancelled, ReceivedBytes = 0, Error = null }); }
+            if (cancel) { File.Delete(job.PartialPath); Save(job with { Status = DownloadStatus.Cancelled, ReceivedBytes = 0, Parts = null, Error = null }); }
             else if (resume) { if (job.Status != DownloadStatus.Cancelled) Start(id); }
             else if (job.Status != DownloadStatus.Cancelled) Save(job with { Status = DownloadStatus.Paused });
         }
         finally { controls.Release(); }
     }
-    private static bool Strong(string? tag) => EntityTagHeaderValue.TryParse(tag, out var parsed) && !parsed.IsWeak;
+    private TransferContext Context() => new(http, limiter, meter, () => settings, Save);
+    private static ProbeResult SavedProbe(DownloadJob job) => new(job.Url, job.ResolvedUrl ?? job.Url, job.FileName, job.TotalBytes,
+        true, job.ETag, job.LastModified, null, job.Category, true);
     private async Task TransferAsync(Guid id, CancellationToken token)
     {
         var acquired = false; var job = Get(id);
@@ -82,52 +88,18 @@ public sealed class DownloadManager : IAsyncDisposable
         {
             await slots.WaitAsync(token); acquired = true;
             job = Get(id) with { Status = DownloadStatus.Downloading }; Save(job);
-            var size = File.Exists(job.PartialPath) ? new FileInfo(job.PartialPath).Length : 0;
-            var offset = Math.Min(size, job.ReceivedBytes);
-            if ((!Strong(job.ETag) && job.LastModified == null) || job.TotalBytes is long knownSize && offset >= knownSize) offset = 0;
-            using var file = new FileStream(job.PartialPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 65536, true);
-            file.SetLength(offset); file.Position = offset;
-            using var request = new HttpRequestMessage(HttpMethod.Get, job.Url);
-            request.Headers.AcceptEncoding.ParseAdd("identity");
-            if (offset > 0)
+            var context = Context();
+            if (job.Parts is { Count: > 0 } && job.Resumable && job.TotalBytes > 0)
+                job = await MultiPartTransfer.RunAsync(job, SavedProbe(job), context, token);
+            else if (job.ReceivedBytes == 0 && job.Parts == null)
             {
-                request.Headers.Range = new RangeHeaderValue(offset, null);
-                request.Headers.IfRange = Strong(job.ETag) ? new RangeConditionHeaderValue(EntityTagHeaderValue.Parse(job.ETag!)) : new RangeConditionHeaderValue(job.LastModified!.Value);
+                var probe = await Prober.ProbeAsync(http, job.Url, token);
+                job = job with { ResolvedUrl = probe.ResolvedUrl }; Save(job);
+                job = probe.Resumable && probe.TotalBytes > 0
+                    ? await MultiPartTransfer.RunAsync(job, probe, context, token)
+                    : await SingleStreamTransfer.RunAsync(job, context, token);
             }
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(45));
-            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
-            response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentEncoding.Any(e => !e.Equals("identity", StringComparison.OrdinalIgnoreCase))) throw new IOException("Unsupported content encoding.");
-            var etag = response.Headers.ETag?.ToString(); var modified = response.Content.Headers.LastModified;
-            long? total;
-            if (response.StatusCode == HttpStatusCode.PartialContent)
-            {
-                var range = response.Content.Headers.ContentRange;
-                if (range == null || range.Unit != "bytes" || range.From != offset || range.To == null || range.Length == null || range.To != range.Length - 1 || range.To < range.From || (response.Content.Headers.ContentLength is long length && length != range.To - range.From + 1)) throw new IOException("Invalid Content-Range.");
-                if (offset > 0 && ((Strong(job.ETag) && etag != job.ETag) || (!Strong(job.ETag) && modified != job.LastModified) || (job.TotalBytes != null && job.TotalBytes != range.Length))) throw new IOException("The resumed entity changed.");
-                total = range.Length;
-            }
-            else if (response.StatusCode == HttpStatusCode.OK)
-            { offset = 0; file.SetLength(0); file.Position = 0; total = response.Content.Headers.ContentLength; }
-            else throw new IOException("Expected a complete or ranged HTTP response.");
-            job = job with { ReceivedBytes = offset, TotalBytes = total, ETag = etag, LastModified = modified, CompletionSha256 = null }; Save(job);
-            await using var body = await response.Content.ReadAsStreamAsync(token);
-            var buffer = new byte[65536]; var checkpoint = DateTime.UtcNow;
-            try
-            {
-                while (true)
-                {
-                    using var idle = CancellationTokenSource.CreateLinkedTokenSource(token); idle.CancelAfter(TimeSpan.FromSeconds(60));
-                    var read = await body.ReadAsync(buffer, idle.Token); if (read == 0) break;
-                    if (job.TotalBytes is long declared && read > declared - job.ReceivedBytes)
-                        throw new IOException("The server sent more bytes than the declared representation.");
-                    await file.WriteAsync(buffer.AsMemory(0, read), token); job = job with { ReceivedBytes = job.ReceivedBytes + read };
-                    if (DateTime.UtcNow - checkpoint > TimeSpan.FromMilliseconds(500)) { file.Flush(true); Save(job); checkpoint = DateTime.UtcNow; }
-                }
-            }
-            finally { file.Flush(true); Save(job); }
-            if (job.TotalBytes is long expected && expected != job.ReceivedBytes) throw new IOException("The response ended before the expected size.");
-            file.Close();
+            else job = await SingleStreamTransfer.RunAsync(job, context, token);
             await using (var input = File.OpenRead(job.PartialPath)) job = job with { CompletionSha256 = Convert.ToHexString(await SHA256.HashDataAsync(input, token)), TotalBytes = job.ReceivedBytes, Status = DownloadStatus.Finalizing };
             Save(job); File.Move(job.PartialPath, job.Destination, false); Save(job with { Status = DownloadStatus.Completed });
         }
@@ -136,7 +108,9 @@ public sealed class DownloadManager : IAsyncDisposable
             // Recover the latest durable checkpoint, including any publication identity.
             job = Get(id);
             if (job.Status == DownloadStatus.Finalizing) Save(RecoverPublication(job));
-            else Save(job with { Status = token.IsCancellationRequested ? DownloadStatus.Paused : DownloadStatus.Failed, Error = token.IsCancellationRequested ? null : ex.Message });
+            else if (token.IsCancellationRequested) Save(job with { Status = DownloadStatus.Paused, Error = null });
+            else Save(job with { Status = DownloadStatus.Failed, Error = ex.Message, ErrorKind = RetryPolicy.Classify(ex),
+                HttpStatus = ex is TransferException { HttpStatus: int status } ? status : ex is HttpRequestException { StatusCode: { } code } ? (int)code : null });
         }
         finally { if (acquired) slots.Release(); }
     }
