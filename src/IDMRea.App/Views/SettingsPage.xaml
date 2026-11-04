@@ -114,6 +114,33 @@
                          LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
             </Grid>
 
+            <TextBlock Text="Browser" Style="{StaticResource Section}"/>
+            <Grid Style="{StaticResource Card}">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Connect to your browser" Style="{StaticResource Label}"/>
+                    <TextBlock Text="The IDM-Rea extension for Chrome, Edge and other Chromium browsers marks the real files on a page, stops click traps and bad sites, and sends downloads here." Style="{StaticResource Hint}"/>
+                </StackPanel>
+                <Button x:Name="AddBrowserButton" Grid.Column="1" Content="Add to browser" AutomationProperties.Name="Add to browser" Click="AddBrowser_Click"/>
+            </Grid>
+            <Grid Style="{StaticResource Card}">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Take over browser downloads" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                    <TextBlock Text="Downloads the browser starts come to IDM-Rea instead, with the site's sign-in kept." Style="{StaticResource Hint}"/>
+                </StackPanel>
+                <ToggleSwitch x:Name="BrowserSwitch" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" AutomationProperties.Name="Take over browser downloads" Toggled="Setting_Changed"/>
+            </Grid>
+            <Grid Style="{StaticResource Card}">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Smallest file to take over" Style="{StaticResource Label}" AutomationProperties.AccessibilityView="Raw"/>
+                    <TextBlock Text="In MB, 0 to 1024. Smaller files stay in the browser; 0 takes over every file." Style="{StaticResource Hint}"/>
+                </StackPanel>
+                <TextBox x:Name="BrowserMinBox" Grid.Column="1" Width="96" InputScope="Number" TextAlignment="Right" AutomationProperties.Name="Smallest file to take over, in MB"
+                         LostFocus="Number_LostFocus" KeyDown="Number_KeyDown"/>
+            </Grid>
+
             <TextBlock Text="Performance" Style="{StaticResource Section}"/>
             <Grid Style="{StaticResource Card}">
                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>

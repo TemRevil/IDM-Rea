@@ -5,20 +5,23 @@ using IDMRea.Contracts;
 using IDMRea.Core;
 namespace IDMRea.Engine;
 
-/// <summary>The engine's Windows-only side: notifications, settings that live outside the engine, and the Recycle Bin.</summary>
+/// <summary>The engine's Windows-only side: notifications, settings that live outside the engine, the Recycle Bin, and the browser link.</summary>
 public interface IEngineShell
 {
     void Notify(DownloadJob job);
     void SettingsChanged(EngineSettings settings);
     bool Recycle(string path);
+    /// <summary>"Add to browser": this copy of IDM-Rea becomes the one the browser extension talks to.</summary>
+    void RegisterBrowser();
 }
 
-/// <summary>No tray, no notifications; removing a finished file deletes it.</summary>
+/// <summary>No tray, no notifications, no browser link; removing a finished file deletes it.</summary>
 public sealed class NullShell : IEngineShell
 {
     public void Notify(DownloadJob job) { }
     public void SettingsChanged(EngineSettings settings) { }
     public bool Recycle(string path) { File.Delete(path); return true; }
+    public void RegisterBrowser() => throw new PlatformNotSupportedException("Connecting to a browser needs Windows.");
 }
 
 /// <summary>Serves the engine pipe: one JSON request line, one JSON reply line; <c>subscribe</c> keeps the line open for pushes.</summary>
@@ -129,6 +132,7 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell)
             case "setSettings":
                 await manager.ApplySettingsAsync(request.Settings ?? throw new ArgumentException("Missing settings."));
                 settings = manager.Settings; break;
+            case "registerBrowser": shell.RegisterBrowser(); break;
             case "shutdown": break;
             default: throw new ArgumentException("Unknown command.");
         }

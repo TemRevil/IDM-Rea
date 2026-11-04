@@ -77,6 +77,8 @@
                     <TextBlock x:Name="FinishedText" Grid.Row="6" Grid.Column="1" Style="{StaticResource FieldValue}"/>
                     <TextBlock Grid.Row="7" Text="Attempts" Style="{StaticResource FieldLabel}"/>
                     <TextBlock x:Name="AttemptsText" Grid.Row="7" Grid.Column="1" Style="{StaticResource FieldValue}"/>
+                    <TextBlock x:Name="ChecksumLabel" Grid.Row="8" Text="Checksum" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock x:Name="ChecksumText" Grid.Row="8" Grid.Column="1" Style="{StaticResource FieldValue}"/>
                 </Grid>
 
                 <StackPanel Spacing="6">

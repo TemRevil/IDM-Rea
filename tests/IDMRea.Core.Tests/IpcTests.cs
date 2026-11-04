@@ -16,6 +16,8 @@ public sealed class IpcTests
         public void Notify(DownloadJob job) { }
         public void SettingsChanged(EngineSettings settings) => Settings.Add(settings);
         public bool Recycle(string path) { File.Delete(path); return true; }
+        public int BrowserRegistrations { get; private set; }
+        public void RegisterBrowser() => BrowserRegistrations++;
     }
 
     /// <summary>An engine host running in this process on its own data folder and pipe.</summary>
@@ -199,6 +201,33 @@ public sealed class IpcTests
             Assert.Equal("session=abc123", h.GetValueOrDefault("Cookie"));
             Assert.Equal("TestBrowser/1.0", h.GetValueOrDefault("User-Agent"));
         });
+    }
+
+    [Fact]
+    public async Task RegisterBrowserCommandReachesTheShell()
+    {
+        await using var host = new Host();
+        var reply = await host.Send(new("registerBrowser", Version: 2));
+        Assert.True(reply.Ok, reply.Error);
+        Assert.Equal(1, host.Shell.BrowserRegistrations);
+    }
+
+    [Fact]
+    public async Task RegisterBrowserWithoutWindowsSaysSoPlainly()
+    {
+        var previous = Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY");
+        var root = Path.Combine(Path.GetTempPath(), "idmrea-ipc-" + Guid.NewGuid());
+        Environment.SetEnvironmentVariable("IDMREA_DATA_DIRECTORY", Path.Combine(root, "data"));
+        using var stop = new CancellationTokenSource();
+        await using var manager = new DownloadManager(Protocol.DataDirectory);
+        var run = new EngineHost(manager, new NullShell()).RunAsync(stop.Token);
+        try
+        {
+            var reply = await new EngineClient().SendAsync(new("registerBrowser", Version: 2));
+            Assert.False(reply.Ok);
+            Assert.Equal("Connecting to a browser needs Windows.", reply.Error);
+        }
+        finally { stop.Cancel(); await run; Environment.SetEnvironmentVariable("IDMREA_DATA_DIRECTORY", previous); }
     }
 
     [Fact]

@@ -104,6 +104,8 @@ public sealed partial class SettingsPage : Page
             LimitBox.IsEnabled = LimitUnit.IsEnabled = limit > 0;
             SetText(RetryBox, Number(s.RetryAttempts));
             UltraSwitch.IsOn = s.UltraPerformance;
+            BrowserSwitch.IsOn = s.BrowserTakeover;
+            SetText(BrowserMinBox, Number(s.BrowserMinBytes / MB));
             ThemeBox.SelectedIndex = (int)s.Theme;
         }
         finally { loading = false; }
@@ -132,6 +134,8 @@ public sealed partial class SettingsPage : Page
             SpeedLimitBytesPerSecond = LimitSwitch.IsOn ? Math.Max(1, limitValue) * unit : 0,
             RetryAttempts = Parse(RetryBox) ?? current.RetryAttempts,
             UltraPerformance = UltraSwitch.IsOn,
+            BrowserTakeover = BrowserSwitch.IsOn,
+            BrowserMinBytes = Parse(BrowserMinBox) is int minMb ? Math.Max(0, minMb) * MB : current.BrowserMinBytes,
             Theme = ThemeBox.SelectedIndex switch { 1 => AppTheme.Light, 2 => AppTheme.Dark, _ => AppTheme.System },
         };
     }
@@ -191,6 +195,55 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException or FileNotFoundException) { ShowError(ex.Message); }
         finally { EngineButton.IsEnabled = true; }
+    }
+
+    /// <summary>The unpacked extension published beside the app.</summary>
+    private static string ExtensionFolder => Path.Combine(AppContext.BaseDirectory, "extension");
+
+    private async void AddBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        AddBrowserButton.IsEnabled = false;
+        try
+        {
+            if (!File.Exists(Path.Combine(ExtensionFolder, "manifest.json")))
+            {
+                ShowError("The extension folder isn't next to the app. Install IDM-Rea again to get it.");
+                return;
+            }
+            var reply = await Shell.Client.SendAsync(new("registerBrowser"));
+            if (!reply.Ok) { ShowError(reply.Error ?? "IDM-Rea could not connect to the browser."); return; }
+            ErrorBar.IsOpen = false;
+            Process.Start("explorer.exe", $"\"{ExtensionFolder}\"");
+            var steps = new StackPanel { Spacing = 10, MaxWidth = 440 };
+            foreach (var line in new[]
+            {
+                "1. In your browser, open the extensions page: chrome://extensions in Chrome, edge://extensions in Edge.",
+                "2. Turn on Developer mode.",
+                "3. Press Load unpacked and choose the extension folder that just opened.",
+            })
+                steps.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
+            steps.Children.Add(new TextBlock
+            {
+                Text = "The extension's menu then says Connected. Downloads it sends use your save folders.", TextWrapping = TextWrapping.Wrap,
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            });
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "Add IDM-Rea to your browser", RequestedTheme = ActualTheme, Content = steps,
+                PrimaryButtonText = "Copy folder path", CloseButtonText = "Done", DefaultButton = ContentDialogButton.Close,
+            };
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            {
+                var data = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                data.SetText(ExtensionFolder);
+                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(data);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException)
+        {
+            ShowError("The download engine isn't running, so the browser can't be connected right now.");
+        }
+        finally { AddBrowserButton.IsEnabled = true; }
     }
 
     private void DataFolder_Click(object sender, RoutedEventArgs e)

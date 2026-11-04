@@ -52,6 +52,10 @@ public sealed partial class DetailsPane : UserControl
         AddedText.Text = When(job.CreatedAt);
         FinishedText.Text = When(job.CompletedAt);
         AttemptsText.Text = job.Attempts.ToString(CultureInfo.InvariantCulture);
+        ChecksumLabel.Visibility = ChecksumText.Visibility = job.ExpectedSha256 is null ? Visibility.Collapsed : Visibility.Visible;
+        ChecksumText.Text = job.Verified ? "Matches the site's"
+            : job.Status == DownloadStatus.Failed && job.ErrorKind == ErrorKind.ChecksumMismatch ? "Doesn't match the site's"
+            : "Checked when the download finishes";
         UrlText.Text = job.Url;
         PathText.Text = job.Destination;
         ErrorInfo.IsOpen = job.Status == DownloadStatus.Failed;
