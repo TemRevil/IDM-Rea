@@ -1,0 +1,23 @@
+namespace IDMRea.Contracts;
+
+/// <summary>One quality a person can pick, for example "1080p MP4, 255 MB". <see cref="Id"/> is yt-dlp's format
+/// selector ("299+140" for picture plus sound, "140" for sound alone).</summary>
+public sealed record VideoChoice(string Id, string Label, string Container, long? Bytes, int? Height, bool AudioOnly);
+
+/// <summary>What a page offers: its title and the qualities, best first.</summary>
+public sealed record VideoInfo(string PageUrl, string Title, double? Duration, string? Thumbnail, IReadOnlyList<VideoChoice> Choices);
+
+/// <summary>
+/// One stream of a video job: the picture, the sound, or one file holding both. <see cref="Url"/> can expire; the job
+/// then asks yt-dlp again for the same <see cref="FormatId"/>. Requests never ask for more than <see cref="ChunkSize"/>.
+/// </summary>
+public sealed record VideoStream(string FormatId, string Url, string Protocol, string Extension,
+    IReadOnlyDictionary<string, string>? Headers = null, long? TotalBytes = null, long? ChunkSize = null,
+    string PartialPath = "", long ReceivedBytes = 0, IReadOnlyList<DownloadPart>? Parts = null, bool Done = false,
+    int SegmentsDone = 0);
+
+public enum VideoStage { Downloading, Joining }
+
+/// <summary>A download of what a page plays: its streams are fetched by the engine, then joined into one file.</summary>
+public sealed record VideoJob(string PageUrl, string ChoiceId, string Container, IReadOnlyList<VideoStream> Streams,
+    VideoStage Stage = VideoStage.Downloading, string? Title = null);
