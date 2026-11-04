@@ -29,7 +29,11 @@ public static class Protocol
     /// <summary>The longest a link check may take; <c>probe</c> and <c>add</c> replies can take this long.</summary>
     public static readonly TimeSpan ProbeLimit = TimeSpan.FromSeconds(30);
     public static string DataDirectory => Path.GetFullPath(Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IDMRea"));
-    public static string PipeName => "IDMRea." + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(DataDirectory)))[..20];
+    public static string PipeName => "IDMRea." + FolderHash(DataDirectory);
+    /// <summary>The app's single-instance key: one window per data folder, like the pipe and the engine lock.</summary>
+    public static string InstanceKey => InstanceKeyFor(DataDirectory);
+    public static string InstanceKeyFor(string dataDirectory) => "IDMRea.Main." + FolderHash(Path.GetFullPath(dataDirectory));
+    private static string FolderHash(string folder) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(folder)))[..20];
     public static async Task<string> ReadLineAsync(StreamReader reader, int limit, CancellationToken token)
     {
         var result = new StringBuilder(); var buffer = new char[1];

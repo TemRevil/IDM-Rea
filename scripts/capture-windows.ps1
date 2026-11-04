@@ -15,7 +15,8 @@ public static class DesktopCapture {
 }
 '@
 $root = Split-Path $PSScriptRoot
-$env:IDMREA_DATA_DIRECTORY = Join-Path $root 'artifacts\runtime-data'
+# Its own data folder, wiped at the start: an IDM-Rea already running on another folder is left alone.
+$env:IDMREA_DATA_DIRECTORY = Join-Path $root 'artifacts\capture-data'
 $folder = Join-Path $root 'artifacts\test-downloads'
 $captures = Join-Path $root 'artifacts\screenshots'
 New-Item -ItemType Directory -Force $folder,$captures | Out-Null
@@ -37,6 +38,16 @@ function Send-Engine($request, $wait = 15000) {
   $response = $reader.ReadLine() | ConvertFrom-Json
   if (!$response.ok) { throw $response.error }
   return $response
+ } finally { $pipe.Dispose() }
+}
+Add-Type -Namespace Pipe -Name Native -MemberDefinition '[DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint id);'
+# The engine serving this run's pipe, never another copy running on its own data folder.
+function Get-Engine {
+ $pipe = New-Object IO.Pipes.NamedPipeClientStream('.', $pipeName, [IO.Pipes.PipeDirection]::InOut)
+ try {
+  $pipe.Connect(5000); $id = [uint32]0
+  if (![Pipe.Native]::GetNamedPipeServerProcessId($pipe.SafePipeHandle, [ref]$id)) { throw 'Could not tell which process serves the engine pipe.' }
+  return Get-Process -Id $id
  } finally { $pipe.Dispose() }
 }
 function Wait-For($check, $description, $seconds = 30) {
@@ -243,10 +254,10 @@ try {
  Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.status -eq 'Downloading' }).Count -gt 0 } 'an active transfer'
  [void]$app.CloseMainWindow(); $app.WaitForExit(10000) | Out-Null
  if (!$app.HasExited) { throw 'The app did not exit when its window closed.' }
- if (!(Get-Process IDMRea.Engine -ErrorAction SilentlyContinue)) { throw 'The engine (and its tray icon) stopped when the window closed.' }
+ try { $engine = Get-Engine } catch { throw 'The engine (and its tray icon) stopped when the window closed.' }
  # The tray icon and its menu are drawn at the screen's real scale only when the engine is DPI aware.
  Add-Type -Namespace Dpi -Name Shcore -MemberDefinition '[DllImport("shcore.dll")] public static extern int GetProcessDpiAwareness(IntPtr process, out int value);'
- $awareness = -1; [void][Dpi.Shcore]::GetProcessDpiAwareness((Get-Process IDMRea.Engine | Select-Object -First 1).Handle, [ref]$awareness)
+ $awareness = -1; [void][Dpi.Shcore]::GetProcessDpiAwareness($engine.Handle, [ref]$awareness)
  if ($awareness -ne 2) { throw "The engine is not per-monitor DPI aware (value $awareness)." }
  $before = (Send-Engine @{command='list'}).jobs | Where-Object { $_.status -eq 'Downloading' } | Select-Object -First 1
  Start-Sleep -Seconds 1

@@ -6,6 +6,16 @@ namespace IDMRea.Tests;
 public sealed class ContractsTests
 {
     [Fact]
+    public void EachDataFolderHasItsOwnAppWindow()
+    {
+        // A second copy run on another data folder (a test run, say) must not hand its launch to the first window.
+        var mine = Protocol.InstanceKeyFor(Path.Combine(Path.GetTempPath(), "a"));
+        Assert.Equal(mine, Protocol.InstanceKeyFor(Path.Combine(Path.GetTempPath(), "a")));
+        Assert.NotEqual(mine, Protocol.InstanceKeyFor(Path.Combine(Path.GetTempPath(), "b")));
+        Assert.NotEqual(Protocol.PipeName, Protocol.InstanceKey);
+    }
+
+    [Fact]
     public void SettingsClampAndUltraValues()
     {
         var clamped = new EngineSettings(DownloadsAtOnce: 40, PartsPerFile: 0, RetryAttempts: -1, SpeedLimitBytesPerSecond: -5).Clamped();

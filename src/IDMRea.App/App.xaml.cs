@@ -7,15 +7,14 @@ namespace IDMRea.App;
 
 public partial class App : Application
 {
-    private const string InstanceKey = "IDMRea.Main";
     private MainWindow? window;
 
-    /// <summary>One app window at a time: a second launch hands its arguments to the first and exits.</summary>
+    /// <summary>One app window per data folder: a second launch hands its arguments to the first and exits.</summary>
     [STAThread]
     public static int Main(string[] args)
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
-        var main = AppInstance.FindOrRegisterForKey(InstanceKey);
+        var main = AppInstance.FindOrRegisterForKey(Protocol.InstanceKey);
         if (!main.IsCurrent)
         {
             AllowSetForegroundWindow((uint)main.ProcessId);

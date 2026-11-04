@@ -2,7 +2,7 @@
 
 ## Processes
 
-- **App** (`IDMRea.App.exe`, WinUI 3, unpackaged, single instance): only shows and controls downloads.
+- **App** (`IDMRea.App.exe`, WinUI 3, unpackaged, one window per data folder): only shows and controls downloads.
   - A second launch hands its arguments to the running window and exits: `--job <id>` opens a download's details, `--add-clipboard` opens the Add dialog, `--settings` opens Settings.
   - While the window is minimised it stops listening for updates.
 - **Engine** (`engine\IDMRea.Engine.exe`): does all downloading.

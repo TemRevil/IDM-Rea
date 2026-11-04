@@ -4,7 +4,7 @@ Results from 2026-11-04 on Windows 11 x64 (.NET SDK 10.0.402, Intel Core 6th gen
 
 ## Tests
 
-`dotnet test tests/IDMRea.Core.Tests -c Release`: 180 passed on `net10.0` and 6 on `net10.0-windows`, none failed. Engine tests also run on Linux in CI.
+`dotnet test tests/IDMRea.Core.Tests -c Release`: 181 passed on `net10.0` and 6 on `net10.0-windows`, none failed. Engine tests also run on Linux in CI.
 
 They cover, against a local HTTP server with switchable faults:
 
@@ -23,7 +23,7 @@ The Recycle Bin test runs only with `IDMREA_TEST_RECYCLE=1`, because each run le
 
 ## The real app
 
-`scripts/capture-windows.ps1` runs the published app and engine against `scripts/fixture-server.py` and drives the window through UI Automation. It passed. It checks:
+`scripts/capture-windows.ps1` runs the published app and engine against `scripts/fixture-server.py` and drives the window through UI Automation. It uses its own data folder (`artifacts\capture-data`), so a copy of IDM-Rea already running on another folder keeps its window, engine and downloads. It passed. It checks:
 
 - The window, sidebar, toolbar and search are present, in light and dark.
 - A missing link is refused when added, with "no longer has this file".
