@@ -21,7 +21,7 @@ public sealed class EngineClient
         await using var pipe = await ConnectAsync(deadline.Token);
         using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true);
         using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
-        await writer.WriteLineAsync(JsonSerializer.Serialize(request with { Version = Protocol.CurrentVersion }, Protocol.Json).AsMemory(), deadline.Token);
+        await writer.WriteLineAsync(JsonSerializer.Serialize(request, Protocol.Json).AsMemory(), deadline.Token);
         return JsonSerializer.Deserialize<EngineResponse>(await Protocol.ReadLineAsync(reader, 16 * 1024 * 1024, deadline.Token), Protocol.Json) ?? throw new IOException("Empty engine response.");
     }
 
