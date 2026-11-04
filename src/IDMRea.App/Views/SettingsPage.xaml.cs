@@ -21,18 +21,21 @@ public sealed partial class SettingsPage : Page
     {
         InitializeComponent();
         foreach (var category in Enum.GetValues<Category>()) FolderRows.Children.Add(FolderRow(category));
-        AboutIcon.Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.png")));
         var version = typeof(App).Assembly.GetName().Version ?? new Version(1, 0, 0);
         VersionText.Text = $"Version {version.ToString(3)}";
         Loaded += (_, _) =>
         {
             Shell.State.SettingsChanged += Load;
             Shell.EngineStateChanged += UpdateEngine;
+            Shell.IconChanged += ShowIcon;
             Load(Shell.State.Settings);
             UpdateEngine();
+            ShowIcon();
         };
-        Unloaded += (_, _) => { Shell.State.SettingsChanged -= Load; Shell.EngineStateChanged -= UpdateEngine; };
+        Unloaded += (_, _) => { Shell.State.SettingsChanged -= Load; Shell.EngineStateChanged -= UpdateEngine; Shell.IconChanged -= ShowIcon; };
     }
+
+    private void ShowIcon() { if (Shell.IconPng is { } png) AboutIcon.Source = new BitmapImage(new Uri(png)); }
 
     private Grid FolderRow(Category category)
     {

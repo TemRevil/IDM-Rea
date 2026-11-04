@@ -9,7 +9,7 @@ public enum TrayCommand { Open = 1, AddFromClipboard, PauseAll, ResumeAll, Quit 
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
-    private const uint CallbackMessage = Native.WM_APP + 1, TooltipMessage = Native.WM_APP + 2;
+    private const uint CallbackMessage = Native.WM_APP + 1, TooltipMessage = Native.WM_APP + 2, IconMessage = Native.WM_APP + 3;
     private readonly Action<TrayCommand> onCommand;
     private readonly Thread thread;
     private readonly ManualResetEventSlim ready = new();
@@ -19,6 +19,7 @@ public sealed class TrayIcon : IDisposable
     private bool ownsIcon;
     private uint taskbarCreated;
     private volatile string tooltip = "IDM-Rea - idle";
+    private volatile string? iconFile;
 
     public TrayIcon(Action<TrayCommand> onCommand)
     {
@@ -36,6 +37,13 @@ public sealed class TrayIcon : IDisposable
         if (text == tooltip) return;
         tooltip = text;
         if (window != IntPtr.Zero) Native.PostMessageW(window, TooltipMessage, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <summary>Shows the icon from an .ico file (the one drawn in the accent colour). Safe from any thread.</summary>
+    public void SetIcon(string path)
+    {
+        iconFile = path;
+        if (window != IntPtr.Zero) Native.PostMessageW(window, IconMessage, IntPtr.Zero, IntPtr.Zero);
     }
 
     private void Run()
@@ -56,8 +64,13 @@ public sealed class TrayIcon : IDisposable
         Native.UnregisterClassW(className, instance);
     }
 
+    private IntPtr LoadFileIcon() => iconFile is { } path
+        ? Native.LoadImageW(IntPtr.Zero, path, Native.IMAGE_ICON, Native.GetSystemMetrics(Native.SM_CXSMICON), Native.GetSystemMetrics(Native.SM_CYSMICON), Native.LR_LOADFROMFILE)
+        : IntPtr.Zero;
+
     private IntPtr LoadOwnIcon()
     {
+        if (LoadFileIcon() is var drawn && drawn != IntPtr.Zero) { ownsIcon = true; return drawn; }
         var small = new IntPtr[1];
         if (Environment.ProcessPath is { } exe && Native.ExtractIconExW(exe, 0, null, small, 1) > 0 && small[0] != IntPtr.Zero) { ownsIcon = true; return small[0]; }
         return Native.LoadIconW(IntPtr.Zero, Native.IDI_APPLICATION);
@@ -84,6 +97,14 @@ public sealed class TrayIcon : IDisposable
                 return IntPtr.Zero;
             case TooltipMessage:
                 var data = Data(Native.NIF_TIP | Native.NIF_SHOWTIP); Native.Shell_NotifyIconW(Native.NIM_MODIFY, ref data);
+                return IntPtr.Zero;
+            case IconMessage:
+                var next = LoadFileIcon();
+                if (next == IntPtr.Zero) return IntPtr.Zero;
+                var (old, ownedOld) = (icon, ownsIcon);
+                icon = next; ownsIcon = true;
+                var changed = Data(Native.NIF_ICON); Native.Shell_NotifyIconW(Native.NIM_MODIFY, ref changed);
+                if (ownedOld) Native.DestroyIcon(old);
                 return IntPtr.Zero;
             case Native.WM_CLOSE:
                 var gone = Data(0); Native.Shell_NotifyIconW(Native.NIM_DELETE, ref gone);

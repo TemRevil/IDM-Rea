@@ -14,9 +14,6 @@
         </Grid.KeyboardAccelerators>
 
         <TitleBar x:Name="AppTitleBar" Title="IDM-Rea" IsPaneToggleButtonVisible="True" PaneToggleRequested="AppTitleBar_PaneToggleRequested">
-            <TitleBar.IconSource>
-                <ImageIconSource x:Name="TitleIcon"/>
-            </TitleBar.IconSource>
             <TitleBar.Content>
                 <AutoSuggestBox x:Name="SearchBox" PlaceholderText="Search downloads" AutomationProperties.Name="Search downloads"
                                 QueryIcon="Find" MinWidth="280" MaxWidth="440" VerticalAlignment="Center" TextChanged="SearchBox_TextChanged"/>

@@ -9,20 +9,23 @@ namespace IDMRea.Engine.Windows;
 public sealed class Toasts
 {
     public const string AppId = "IDMRea";
+    private const string KeyPath = @"Software\Classes\AppUserModelId\" + AppId;
     private readonly Func<Guid, DownloadJob?> find;
     private readonly ToastNotifier notifier;
 
     public Toasts(Func<Guid, DownloadJob?> find)
     {
         this.find = find;
-        using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\AppUserModelId\" + AppId, writable: true))
-        {
-            key.SetValue("DisplayName", "IDM-Rea");
-            var icon = Path.Combine(AppLauncher.AppFolder, "Assets", "AppIcon.png");
-            if (File.Exists(icon)) key.SetValue("IconUri", icon); else key.DeleteValue("IconUri", false);
-        }
+        using (var key = Registry.CurrentUser.CreateSubKey(KeyPath, writable: true)) key.SetValue("DisplayName", "IDM-Rea");
         Native.SetCurrentProcessExplicitAppUserModelID(AppId);
         notifier = ToastNotificationManager.CreateToastNotifier(AppId);
+    }
+
+    /// <summary>The picture Windows shows on the app's notifications: the icon drawn in the accent colour.</summary>
+    public static void SetIcon(string png)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(KeyPath, writable: true);
+        key.SetValue("IconUri", png);
     }
 
     /// <summary>The toast XML. Clicking the toast opens the job's details; buttons carry <c>action|job id</c>.</summary>

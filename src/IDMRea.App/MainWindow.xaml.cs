@@ -17,6 +17,9 @@ public sealed partial class MainWindow : Window
     private readonly EngineSubscription subscription = new();
     private readonly CancellationTokenSource lifetime = new();
     private readonly DispatcherTimer ticker = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly WindowsColors colors = new();
+    private AppTheme theme = AppTheme.System;
+    private Rgb? iconRing;
     private bool subscribed, quitting;
     private LaunchArguments? pending;
 
@@ -25,6 +28,9 @@ public sealed partial class MainWindow : Window
     public EngineClient Client { get; } = new();
     public bool EngineConnected => subscription.Connected;
     public event Action? EngineStateChanged;
+    /// <summary>The 256 px icon in the current accent colour, once drawn.</summary>
+    public string? IconPng { get; private set; }
+    public event Action? IconChanged;
 
     public MainWindow()
     {
@@ -34,9 +40,7 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-        var assets = Path.Combine(AppContext.BaseDirectory, "Assets");
-        AppWindow.SetIcon(Path.Combine(assets, "AppIcon.ico"));
-        TitleIcon.ImageSource = new BitmapImage(new Uri(Path.Combine(assets, "AppIcon.png")));
+        _ = UpdateIconAsync();
         if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
         else Root.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 760));
@@ -46,6 +50,7 @@ public sealed partial class MainWindow : Window
         State.SettingsChanged += s => ApplyTheme(s.Theme, remember: true);
         subscription.Received += update => DispatcherQueue.TryEnqueue(() => State.Apply(update));
         subscription.ConnectionChanged += _ => DispatcherQueue.TryEnqueue(UpdateEngineState);
+        colors.Changed += () => DispatcherQueue.TryEnqueue(WindowsColorsChanged);
         ticker.Tick += (_, _) => { foreach (var row in State.All) if (row.Status == DownloadStatus.Retrying) row.Refresh(); };
         AppWindow.Changed += AppWindow_Changed;
         AppWindow.Closing += AppWindow_Closing;
@@ -120,11 +125,44 @@ public sealed partial class MainWindow : Window
         EngineStateChanged?.Invoke();
     }
 
+    /// <summary>The icon is drawn in the accent colour off the UI thread (kept on disk per colour), then shown everywhere.</summary>
+    private async Task UpdateIconAsync()
+    {
+        var ring = colors.Ring;
+        if (ring == iconRing) return;
+        iconRing = ring;
+        try
+        {
+            var (ico, png) = await Task.Run(() => IconArt.Files(ring));
+            if (ring != iconRing) return;
+            AppWindow.SetIcon(ico);
+            AppTitleBar.IconSource = new ImageIconSource { ImageSource = new BitmapImage(new Uri(png)) };
+            IconPng = png;
+            IconChanged?.Invoke();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { App.Log("icon: " + ex.Message); }
+    }
+
+    /// <summary>
+    /// Windows changed its accent or light/dark mode. The new accent shades go into the app's resources and the
+    /// theme is flipped and restored so every control re-reads them; the caption buttons and the icon follow.
+    /// </summary>
+    private void WindowsColorsChanged()
+    {
+        colors.CopyAccentTo(Application.Current.Resources);
+        var kept = Root.RequestedTheme;
+        Root.RequestedTheme = Root.ActualTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+        Root.RequestedTheme = kept;
+        ApplyTheme(theme);
+        UpdateEngineState();
+        _ = UpdateIconAsync();
+    }
+
     public void ApplyTheme(AppTheme theme, bool remember = false)
     {
+        this.theme = theme;
         Root.RequestedTheme = theme switch { AppTheme.Light => ElementTheme.Light, AppTheme.Dark => ElementTheme.Dark, _ => ElementTheme.Default };
-        var dark = Root.ActualTheme == ElementTheme.Dark || theme == AppTheme.Dark
-            || (theme == AppTheme.System && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+        var dark = theme == AppTheme.Dark || (theme == AppTheme.System && colors.SystemIsDark);
         var bar = AppWindow.TitleBar;
         bar.ButtonBackgroundColor = bar.ButtonInactiveBackgroundColor = Colors.Transparent;
         bar.ButtonForegroundColor = dark ? Colors.White : Colors.Black;

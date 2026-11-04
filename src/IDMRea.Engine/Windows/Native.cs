@@ -9,6 +9,8 @@ internal static class Native
     public const uint MF_STRING = 0x0, MF_SEPARATOR = 0x800, TPM_RIGHTBUTTON = 0x2, TPM_RETURNCMD = 0x100, TPM_NONOTIFY = 0x80;
     public static readonly IntPtr HWND_MESSAGE = new(-3);
     public const int IDI_APPLICATION = 32512;
+    public const uint IMAGE_ICON = 1, LR_LOADFROMFILE = 0x10;
+    public const int SM_CXSMICON = 49, SM_CYSMICON = 50;
 
     public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
@@ -67,6 +69,8 @@ internal static class Native
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr LoadIconW(IntPtr instance, IntPtr name);
     [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr icon);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr LoadImageW(IntPtr instance, string name, uint type, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern uint ExtractIconExW(string file, int index, IntPtr[]? large, IntPtr[]? small, uint count);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern bool Shell_NotifyIconW(uint message, ref NOTIFYICONDATAW data);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern int SHFileOperationW(ref SHFILEOPSTRUCTW op);
