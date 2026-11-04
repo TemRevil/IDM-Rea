@@ -27,14 +27,7 @@ public sealed class DownloadManager : IAsyncDisposable
     private void Save(DownloadJob job) { lock (gate) { job = job with { UpdatedAt = DateTimeOffset.UtcNow }; store.Save(job); jobs[job.Id] = job; } }
     private DownloadJob Get(Guid id) { lock (gate) return jobs[id]; }
     public IReadOnlyList<DownloadJob> Snapshot() { lock (gate) return jobs.Values.OrderByDescending(j => j.UpdatedAt).ToArray(); }
-    public static string SafeName(string name)
-    {
-        name = new string(name.Select(c => c < 32 || "<>:\"/\\|?*".Contains(c) ? '_' : c).ToArray()).Trim().TrimEnd('.');
-        if (string.IsNullOrWhiteSpace(name)) name = "download";
-        var stem = name.Split('.')[0].TrimEnd(' ').ToUpperInvariant();
-        if (new[] { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" }.Contains(stem)) name = "_" + name;
-        return name.Length > 180 ? name[..180] : name;
-    }
+    public static string SafeName(string name) => FileNames.SafeName(name);
     public async Task<DownloadJob> AddAsync(string url, string folder)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) throw new ArgumentException("Use an absolute HTTP or HTTPS URL.");

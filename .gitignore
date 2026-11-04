@@ -13,3 +13,4 @@ TestResults/
 *.xpi
 node_modules/
 __pycache__/
+.superpowers/
