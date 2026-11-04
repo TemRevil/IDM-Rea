@@ -2,8 +2,7 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
-using IDMRea.Contracts;
-namespace IDMRea.App;
+namespace IDMRea.Contracts;
 
 /// <summary>One request, one reply over the engine pipe. Starts the engine when it is not running.</summary>
 public sealed class EngineClient
@@ -27,11 +26,12 @@ public sealed class EngineClient
         return JsonSerializer.Deserialize<EngineResponse>(await Protocol.ReadLineAsync(reader, 16 * 1024 * 1024, deadline.Token), Protocol.Json) ?? throw new IOException("Empty engine response.");
     }
 
-    public async Task EnsureStartedAsync()
+    /// <param name="enginePath">The engine to start; by default the one in the app's <c>engine</c> folder.</param>
+    public async Task EnsureStartedAsync(string? enginePath = null)
     {
         using var probe = new CancellationTokenSource(500);
         try { await SendAsync(new("list"), probe.Token); return; } catch (OperationCanceledException) { }
-        var path = Path.Combine(AppContext.BaseDirectory, "engine", "IDMRea.Engine.exe");
+        var path = enginePath ?? Path.Combine(AppContext.BaseDirectory, "engine", "IDMRea.Engine.exe");
         if (!File.Exists(path)) throw new FileNotFoundException("The download engine is missing from the app folder.", path);
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true });
         using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(15));

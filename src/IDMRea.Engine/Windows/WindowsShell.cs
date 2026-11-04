@@ -6,6 +6,7 @@ namespace IDMRea.Engine.Windows;
 public sealed class WindowsShell : IEngineShell, IDisposable
 {
     private readonly StartupRegistration startup = new();
+    private readonly BrowserRegistration browser = new();
     private readonly MemoryTrim trim = new();
     private readonly object gate = new();
     private DownloadManager? manager;
@@ -28,7 +29,15 @@ public sealed class WindowsShell : IEngineShell, IDisposable
         SettingsChanged(downloads.Settings);
         downloads.JobChanged += _ => Activity();
         Activity();
+        // The app folder may have moved since "Add to browser": point the browser at this copy's host again.
+        try { browser.RefreshIfOwned(BrowserHostPath, Protocol.DataDirectory, BrowserRegistration.DefaultHome); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException) { }
     }
+
+    public static string BrowserHostPath => Path.Combine(AppContext.BaseDirectory, "IDMRea.BrowserHost.exe");
+
+    /// <summary>"Add to browser" in Settings: this copy's host and data folder become the browser's IDM-Rea.</summary>
+    public void RegisterBrowser() => browser.Register(BrowserHostPath, Protocol.DataDirectory, BrowserRegistration.DefaultHome);
 
     public void Notify(DownloadJob job)
     {

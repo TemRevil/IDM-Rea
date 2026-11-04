@@ -7,6 +7,39 @@ namespace IDMRea.Tests;
 public sealed class WindowsTests
 {
     [Fact]
+    public void BrowserRegistrationWritesManifestKeysAndTarget()
+    {
+        const string prefix = @"Software\IDMRea-Tests";
+        var dir = Path.Combine(Path.GetTempPath(), "idmrea-tests-" + Guid.NewGuid());
+        var data = Path.Combine(dir, "data"); var home = Path.Combine(dir, "home");
+        var registration = new BrowserRegistration(prefix);
+        string? Key(string browser) { using var key = Registry.CurrentUser.OpenSubKey($@"{prefix}\{browser}\NativeMessagingHosts\com.idmrea.host"); return key?.GetValue("") as string; }
+        string HostPath(string manifest) { using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest)); return doc.RootElement.GetProperty("path").GetString()!; }
+        try
+        {
+            registration.Register(@"C:\Apps\IDM-Rea\engine\IDMRea.BrowserHost.exe", data, home);
+            var manifest = Path.Combine(data, "browser", "com.idmrea.host.json");
+            Assert.All(new[] { @"Google\Chrome", @"Microsoft\Edge", "Chromium" }, b => Assert.Equal(manifest, Key(b)));
+            using (var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest)))
+            {
+                var root = doc.RootElement;
+                Assert.Equal("com.idmrea.host", root.GetProperty("name").GetString());
+                Assert.Equal("stdio", root.GetProperty("type").GetString());
+                Assert.Equal("chrome-extension://ioenfhcbkjnjlpkmjngfhohmimmjgllg/", Assert.Single(root.GetProperty("allowed_origins").EnumerateArray()).GetString());
+            }
+            Assert.Equal(@"C:\Apps\IDM-Rea\engine\IDMRea.BrowserHost.exe", HostPath(manifest));
+            Assert.Equal(Path.GetFullPath(data), File.ReadAllText(Path.Combine(home, "browser-target.txt")).Trim());
+
+            // Another data folder (a test run) never takes the registration over; the owner's own folder refreshes it.
+            Assert.False(registration.RefreshIfOwned(@"D:\Other\IDMRea.BrowserHost.exe", Path.Combine(dir, "other"), home));
+            Assert.Equal(@"C:\Apps\IDM-Rea\engine\IDMRea.BrowserHost.exe", HostPath(manifest));
+            Assert.True(registration.RefreshIfOwned(@"D:\Moved\IDMRea.BrowserHost.exe", data, home));
+            Assert.Equal(@"D:\Moved\IDMRea.BrowserHost.exe", HostPath(manifest));
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(prefix, false); }
+    }
+
+    [Fact]
     public void StartupRegistrationRoundTrip()
     {
         const string key = @"Software\IDMRea-Tests\Run";

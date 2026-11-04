@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>IDMRea.BrowserHost</RootNamespace>
+    <!-- Started by the browser for each connection: small and quick to start. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../IDMRea.Contracts/IDMRea.Contracts.csproj" />
+  </ItemGroup>
+</Project>

@@ -202,6 +202,43 @@ public sealed class IpcTests
     }
 
     [Fact]
+    public async Task BrowserHostAddsThroughTheEngine()
+    {
+        await using var server = new Fixture { Path = "/game.iso" };
+        await using var host = new Host();
+        await host.Manager.ApplySettingsAsync(host.Manager.Settings with
+        {
+            BrowserMinBytes = 4096, Folders = new Dictionary<Category, string> { [Category.Other] = host.Root, [Category.Archives] = host.Root },
+        });
+        var handler = new IDMRea.BrowserHost.HostHandler(host.Send);
+        using var hello = JsonDocument.Parse("""{"type":"hello","id":7}""");
+        var greeting = JsonSerializer.SerializeToElement(await handler.HandleAsync(hello.RootElement), Protocol.Json);
+        Assert.Equal(7, greeting.GetProperty("id").GetInt32());
+        Assert.True(greeting.GetProperty("ok").GetBoolean());
+        Assert.True(greeting.GetProperty("takeover").GetBoolean());
+        Assert.Equal(4096, greeting.GetProperty("minBytes").GetInt64());
+
+        using var add = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            type = "add", id = 8, url = server.Url, referrer = "https://site.example/page", cookies = "session=abc123", userAgent = "TestBrowser/1.0",
+        }));
+        var added = JsonSerializer.SerializeToElement(await handler.HandleAsync(add.RootElement), Protocol.Json);
+        Assert.True(added.GetProperty("ok").GetBoolean(), added.ToString());
+        Assert.Equal(8, added.GetProperty("id").GetInt32());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (host.Manager.Snapshot().Single().Status != DownloadStatus.Completed) await Task.Delay(25, timeout.Token);
+        Assert.Equal(Path.Combine(host.Root, "game.iso"), host.Manager.Snapshot().Single().Destination);
+        Assert.All(server.RequestHeaders, h => Assert.Equal("session=abc123", h.GetValueOrDefault("Cookie")));
+
+        using var bad = JsonDocument.Parse("""{"type":"add","id":9,"url":"ftp://x"}""");
+        var refused = JsonSerializer.SerializeToElement(await handler.HandleAsync(bad.RootElement), Protocol.Json);
+        Assert.False(refused.GetProperty("ok").GetBoolean());
+        Assert.False(string.IsNullOrEmpty(refused.GetProperty("error").GetString()));
+        using var unknown = JsonDocument.Parse("""{"type":"nope","id":10}""");
+        Assert.False(JsonSerializer.SerializeToElement(await handler.HandleAsync(unknown.RootElement), Protocol.Json).GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
     public async Task ConcurrentClientsDuringSubscribe()
     {
         await using var host = new Host();
