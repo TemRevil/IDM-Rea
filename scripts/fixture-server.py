@@ -4,11 +4,14 @@ import time
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        size = 65536 if self.path == '/complete.bin' else 64 * 1024 * 1024
+        small = self.path in ('/complete.bin', '/named')
+        size = 65536 if small else 64 * 1024 * 1024
         offset = int(self.headers.get('Range', 'bytes=0-').split('=')[1].split('-')[0])
         self.send_response(206 if offset else 200)
         self.send_header('Content-Length', str(size - offset))
         self.send_header('ETag', '"fixture-v1"')
+        if self.path == '/named':
+            self.send_header('Content-Disposition', 'attachment; filename="report.pdf"')
         if offset:
             self.send_header('Content-Range', f'bytes {offset}-{size-1}/{size}')
         self.end_headers()
@@ -19,7 +22,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(block)
                 self.wfile.flush()
                 offset += len(block)
-                if size > 65536:
+                if not small:
                     time.sleep(.025)
         except (ConnectionError, OSError):
             pass

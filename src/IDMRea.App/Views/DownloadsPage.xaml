@@ -1,22 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page x:Class="IDMRea.App.Views.DownloadsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:app="using:IDMRea.App" Background="Transparent">
-    <ListView x:Name="List" Padding="16,12" SelectionMode="Extended">
-        <ListView.ItemTemplate>
-            <DataTemplate x:DataType="app:DownloadRow">
-                <Grid Padding="4,10" ColumnSpacing="14" RowSpacing="6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="{x:Bind CategoryGlyph, Mode=OneWay}" FontSize="18" VerticalAlignment="Top" Margin="0,2,0,0" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <StackPanel Grid.Column="1" Spacing="4">
-                        <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                        <TextBlock Text="{x:Bind StatusLine, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                        <ProgressBar Value="{x:Bind Progress, Mode=OneWay}" IsIndeterminate="{x:Bind Indeterminate, Mode=OneWay}" Maximum="100" Visibility="{x:Bind ShowProgress, Mode=OneWay}"/>
-                    </StackPanel>
-                </Grid>
-            </DataTemplate>
-        </ListView.ItemTemplate>
-    </ListView>
+      xmlns:app="using:IDMRea.App" xmlns:views="using:IDMRea.App.Views" Background="Transparent" AllowDrop="True" DragOver="Page_DragOver" Drop="Page_Drop">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Padding="28,20,20,12" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TitleText" Text="All downloads" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="NoWrap" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MinWidth="96"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <Button x:Name="BulkPause" Style="{StaticResource SubtleButtonStyle}" AutomationProperties.Name="Pause selected" Click="BulkPause_Click" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE769;" FontSize="14"/><TextBlock Text="Pause"/></StackPanel>
+                    </Button>
+                    <Button x:Name="BulkResume" Style="{StaticResource SubtleButtonStyle}" AutomationProperties.Name="Resume selected" Click="BulkResume_Click" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE768;" FontSize="14"/><TextBlock Text="Resume"/></StackPanel>
+                    </Button>
+                    <Button x:Name="BulkRemove" Style="{StaticResource SubtleButtonStyle}" AutomationProperties.Name="Remove selected" Click="BulkRemove_Click" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE74D;" FontSize="14"/><TextBlock Text="Remove"/></StackPanel>
+                    </Button>
+                    <Border x:Name="BulkSeparator" Width="1" Height="20" Margin="6,0" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Visibility="Collapsed"/>
+                    <Button Style="{StaticResource SubtleButtonStyle}" Padding="10,8" AutomationProperties.Name="Resume all" ToolTipService.ToolTip="Resume all" Click="ResumeAll_Click"><FontIcon Glyph="&#xE768;" FontSize="14"/></Button>
+                    <Button Style="{StaticResource SubtleButtonStyle}" Padding="10,8" AutomationProperties.Name="Pause all" ToolTipService.ToolTip="Pause all" Click="PauseAll_Click"><FontIcon Glyph="&#xE769;" FontSize="14"/></Button>
+                    <DropDownButton AutomationProperties.Name="Sort" ToolTipService.ToolTip="Sort" Background="Transparent" BorderThickness="0" Padding="10,8">
+                        <FontIcon Glyph="&#xE8CB;" FontSize="14"/>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <RadioMenuFlyoutItem x:Name="SortNewest" Text="Newest" GroupName="Sort" IsChecked="True" Tag="Newest" Click="Sort_Click"/>
+                                <RadioMenuFlyoutItem x:Name="SortName" Text="Name" GroupName="Sort" Tag="Name" Click="Sort_Click"/>
+                                <RadioMenuFlyoutItem x:Name="SortSize" Text="Size" GroupName="Sort" Tag="Size" Click="Sort_Click"/>
+                                <RadioMenuFlyoutItem x:Name="SortStatus" Text="Status" GroupName="Sort" Tag="Status" Click="Sort_Click"/>
+                            </MenuFlyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                    <Button Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Add download" Click="Add_Click" Margin="8,0,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE710;" FontSize="14"/><TextBlock Text="Add download"/></StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <InfoBar x:Name="ErrorBar" Grid.Row="1" Severity="Error" IsOpen="False" IsClosable="True" Margin="28,0,16,8"/>
+
+            <ListView x:Name="List" Grid.Row="2" Padding="16,0,16,16" SelectionMode="Extended" AutomationProperties.Name="Downloads list"
+                      SelectionChanged="List_SelectionChanged" PreviewKeyDown="List_PreviewKeyDown" DoubleTapped="List_DoubleTapped">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Padding" Value="12,0,8,0"/>
+                        <Setter Property="Margin" Value="0,1"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="app:DownloadRow">
+                        <Grid Padding="0,12" ColumnSpacing="16" Background="Transparent" PointerEntered="Row_PointerEntered" PointerExited="Row_PointerExited"
+                              GotFocus="Row_GotFocus" LostFocus="Row_LostFocus">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="36" Height="36" CornerRadius="8" VerticalAlignment="Center" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                <FontIcon Glyph="{x:Bind CategoryGlyph, Mode=OneWay}" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                <TextBlock Text="{x:Bind StatusLine, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                <ProgressBar Value="{x:Bind Progress, Mode=OneWay}" IsIndeterminate="{x:Bind Indeterminate, Mode=OneWay}" Maximum="100"
+                                             ShowError="{x:Bind IsFailed, Mode=OneWay}" Visibility="{x:Bind ShowProgress, Mode=OneWay}" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Opacity="0">
+                                <StackPanel.OpacityTransition><ScalarTransition Duration="0:0:0.2"/></StackPanel.OpacityTransition>
+                                <Button Style="{StaticResource SubtleButtonStyle}" Padding="9" IsEnabled="{x:Bind ToggleEnabled, Mode=OneWay}"
+                                        AutomationProperties.Name="{x:Bind ToggleLabel, Mode=OneWay}" ToolTipService.ToolTip="{x:Bind ToggleLabel, Mode=OneWay}"
+                                        Tag="{x:Bind}" Click="RowToggle_Click">
+                                    <FontIcon Glyph="{x:Bind ToggleGlyph, Mode=OneWay}" FontSize="14"/>
+                                </Button>
+                                <Button Style="{StaticResource SubtleButtonStyle}" Padding="9" AutomationProperties.Name="Show in folder" ToolTipService.ToolTip="Show in folder"
+                                        Tag="{x:Bind}" Click="RowFolder_Click">
+                                    <FontIcon Glyph="&#xE838;" FontSize="14"/>
+                                </Button>
+                                <Button Style="{StaticResource SubtleButtonStyle}" Padding="9" AutomationProperties.Name="More" ToolTipService.ToolTip="More">
+                                    <FontIcon Glyph="&#xE712;" FontSize="14"/>
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuFlyoutItem Text="Cancel" Tag="{x:Bind}" IsEnabled="{x:Bind CanCancel, Mode=OneWay}" Click="RowMenu_Click" AccessKey="C">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE711;"/></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Retry" Tag="{x:Bind}" IsEnabled="{x:Bind CanRetry, Mode=OneWay}" Click="RowMenu_Click">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE72C;"/></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Copy link" Tag="{x:Bind}" Click="RowMenu_Click">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8C8;"/></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutSeparator/>
+                                            <MenuFlyoutItem Text="Remove from list" Tag="{x:Bind}" Click="RowMenu_Click">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE738;"/></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Delete file" Tag="{x:Bind}" IsEnabled="{x:Bind IsCompleted, Mode=OneWay}" Click="RowMenu_Click">
+                                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;"/></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <StackPanel x:Name="EmptyState" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="Collapsed" Margin="0,0,0,60">
+                <FontIcon x:Name="EmptyIcon" Glyph="&#xE896;" FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                <TextBlock x:Name="EmptyText" Text="No downloads yet." Style="{StaticResource BodyStrongTextBlockStyle}" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <Button x:Name="EmptyAdd" Content="Add download" HorizontalAlignment="Center" Click="Add_Click"/>
+            </StackPanel>
+        </Grid>
+
+        <views:DetailsPane x:Name="Details" Grid.Column="1" Visibility="Collapsed"/>
+    </Grid>
 </Page>

@@ -34,6 +34,9 @@ public sealed class DownloadRow(DownloadJob job) : INotifyPropertyChanged
         Category.Programs => "", Category.Archives => "", Category.Images => "", _ => "",
     };
 
+    /// <summary>The name screen readers and UI Automation read for the list item.</summary>
+    public override string ToString() => Name;
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public void Update(DownloadJob value, long bytesPerSecond, int attempts)

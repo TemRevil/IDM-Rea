@@ -9,6 +9,8 @@
         </Grid.RowDefinitions>
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="FocusSearch_Invoked"/>
+            <KeyboardAccelerator Modifiers="Control" Key="N" Invoked="AddDownload_Invoked"/>
+            <KeyboardAccelerator Modifiers="Control" Key="V" Invoked="Paste_Invoked"/>
         </Grid.KeyboardAccelerators>
 
         <TitleBar x:Name="AppTitleBar" Title="IDM-Rea" IsPaneToggleButtonVisible="True" PaneToggleRequested="AppTitleBar_PaneToggleRequested">

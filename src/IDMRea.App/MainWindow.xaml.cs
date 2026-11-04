@@ -156,6 +156,7 @@ public sealed partial class MainWindow : Window
         if (args.Job is null && !args.AddFromClipboard) return;
         if (!State.HasSettings) { pending = args; return; }
         if (args.Job is Guid id) ShowJob(id);
+        if (args.AddFromClipboard) _ = OpenAddDialogAsync(null);
     }
 
     public void ShowJob(Guid id)
@@ -188,6 +189,49 @@ public sealed partial class MainWindow : Window
     private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         SearchBox.Focus(FocusState.Keyboard); args.Handled = true;
+    }
+
+    private bool adding;
+
+    /// <summary>The Add download dialog, prefilled with <paramref name="url"/> or else a link from the clipboard.</summary>
+    public async Task OpenAddDialogAsync(string? url)
+    {
+        if (adding) return;
+        adding = true;
+        try
+        {
+            url ??= await ClipboardLinkAsync();
+            if (ContentFrame.Content is not DownloadsPage) SelectNav(DownloadViews.All);
+            var dialog = new AddDownloadDialog(url) { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme };
+            await dialog.ShowAsync();
+            if (dialog.OpenExisting is Guid id) ShowJob(id);
+        }
+        finally { adding = false; }
+    }
+
+    private static async Task<string?> ClipboardLinkAsync()
+    {
+        try
+        {
+            var content = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+            if (!content.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)) return null;
+            var text = (await content.GetTextAsync()).Trim();
+            return AddDownloadDialog.IsLink(text) ? text : null;
+        }
+        catch (COMException) { return null; }
+    }
+
+    private void AddDownload_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        args.Handled = true; _ = OpenAddDialogAsync(null);
+    }
+
+    /// <summary>Ctrl+V outside a text field opens the dialog when the clipboard holds a link.</summary>
+    private async void Paste_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox or AutoSuggestBox or PasswordBox) return;
+        args.Handled = true;
+        if (await ClipboardLinkAsync() is { } link) await OpenAddDialogAsync(link);
     }
 
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);

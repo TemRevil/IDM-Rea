@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog x:Class="IDMRea.App.Views.AddDownloadDialog" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+               Title="Add download" PrimaryButtonText="Start download" SecondaryButtonText="Download later" CloseButtonText="Cancel"
+               DefaultButton="Primary" IsPrimaryButtonEnabled="False" IsSecondaryButtonEnabled="False"
+               PrimaryButtonClick="Primary_Click" SecondaryButtonClick="Secondary_Click">
+    <StackPanel Width="480" Spacing="14">
+        <TextBox x:Name="UrlBox" Header="Download URL" AutomationProperties.Name="Download URL" PlaceholderText="https://example.com/file.zip"
+                 InputScope="Url" TextChanged="UrlBox_TextChanged"/>
+
+        <InfoBar x:Name="DuplicateBar" Severity="Informational" IsClosable="False" IsOpen="False" Message="This link is already in your list.">
+            <InfoBar.Content>
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+                    <Button Content="Open existing" AutomationProperties.Name="Open existing" Click="OpenExisting_Click"/>
+                    <Button Content="Download again" AutomationProperties.Name="Download again" Click="DownloadAgain_Click"/>
+                </StackPanel>
+            </InfoBar.Content>
+        </InfoBar>
+
+        <Grid ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <ProgressRing x:Name="Probing" Width="16" Height="16" IsActive="False" Visibility="Collapsed" VerticalAlignment="Center"/>
+            <TextBlock x:Name="InfoLine" Grid.Column="1" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Paste or type a link to see the file's details."/>
+        </Grid>
+
+        <TextBox x:Name="NameBox" Header="File name" AutomationProperties.Name="File name" IsEnabled="False" TextChanged="NameBox_TextChanged"/>
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="FolderBox" Header="Save to" AutomationProperties.Name="Save to" TextChanged="FolderBox_TextChanged"/>
+            <Button Grid.Column="1" Content="Browse" AutomationProperties.Name="Browse" VerticalAlignment="Bottom" Click="Browse_Click"/>
+        </Grid>
+
+        <TextBlock x:Name="ExistsLine" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" Visibility="Collapsed"
+                   Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+        <TextBlock x:Name="ErrorLine" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" Visibility="Collapsed"
+                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+    </StackPanel>
+</ContentDialog>
