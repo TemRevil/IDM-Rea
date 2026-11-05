@@ -187,6 +187,25 @@
                         <Button x:Name="EngineButton" Content="Stop engine" Click="Engine_Click"/>
                     </StackPanel>
                 </Grid>
+                <Grid Style="{StaticResource Card}" RowSpacing="12" AutomationProperties.Name="Logs">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Logs" Style="{StaticResource Label}"/>
+                        <TextBlock Text="IDM-Rea notes crashes, errors, failed downloads, moments the window stopped responding and anything that was slow, here on this PC. Nothing leaves it unless you send it. If something went wrong, send the logs to temrevil@gmail.com with a line on what happened." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="SendLogsButton" Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Email the logs" Click="SendLogs_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE715;" FontSize="14"/><TextBlock Text="Email the logs"/></StackPanel>
+                        </Button>
+                        <Button x:Name="SaveLogsButton" AutomationProperties.Name="Save a copy of the logs" Click="SaveLogs_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE896;" FontSize="14"/><TextBlock Text="Save a copy"/></StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Open the logs folder" Click="OpenLogs_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE838;" FontSize="14"/><TextBlock Text="Open the logs folder"/></StackPanel>
+                        </Button>
+                    </StackPanel>
+                    <InfoBar x:Name="LogsBar" Grid.Row="2" IsOpen="False" IsClosable="True"/>
+                </Grid>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

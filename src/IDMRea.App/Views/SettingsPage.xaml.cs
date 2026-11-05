@@ -341,4 +341,70 @@ public sealed partial class SettingsPage : Page
         Directory.CreateDirectory(Protocol.DataDirectory);
         Process.Start("explorer.exe", $"\"{Protocol.DataDirectory}\"");
     }
+
+    private const string LogsTo = "temrevil@gmail.com";
+
+    private static string LogsFileName() => "IDM-Rea logs " + DateTime.Now.ToString("yyyy-MM-dd HH-mm", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Packs the logs into a .zip in the temp folder, shows it in Explorer and opens a new email to the developer,
+    /// since an email link can't attach a file itself.
+    /// </summary>
+    private async void SendLogs_Click(object sender, RoutedEventArgs e)
+    {
+        SendLogsButton.IsEnabled = false;
+        try
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "IDM-Rea");
+            Directory.CreateDirectory(dir);
+            var zip = Path.Combine(dir, LogsFileName() + ".zip");
+            var engine = Shell.EngineConnected;
+            await Task.Run(() => { using var file = File.Create(zip); Log.Bundle(file, engine); });
+            Process.Start("explorer.exe", $"/select,\"{zip}\"");
+            var body = $"What happened (and roughly when):\r\n\r\n\r\n\r\nThe logs are attached: {Path.GetFileName(zip)}";
+            Process.Start(new ProcessStartInfo($"mailto:{LogsTo}?subject={Uri.EscapeDataString($"IDM-Rea {Log.Version} logs")}&body={Uri.EscapeDataString(body)}") { UseShellExecute = true })?.Dispose();
+            ShowLogs(InfoBarSeverity.Informational, "Attach the file Explorer is showing",
+                $"Your email app should have opened a message to {LogsTo}. Drag {Path.GetFileName(zip)} into it, say what happened, and send it.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Settings", "Couldn't prepare the logs to email", ex);
+            ShowLogs(InfoBarSeverity.Error, "Couldn't prepare the logs", ex.Message);
+        }
+        finally { SendLogsButton.IsEnabled = true; }
+    }
+
+    private async void SaveLogs_Click(object sender, RoutedEventArgs e)
+    {
+        SaveLogsButton.IsEnabled = false;
+        try
+        {
+            var picker = new FileSavePicker(Shell.AppWindow.Id) { SuggestedFileName = LogsFileName(), SuggestedStartLocation = PickerLocationId.Desktop };
+            picker.FileTypeChoices.Add("Zip file", [".zip"]);
+            if (await picker.PickSaveFileAsync() is not { Path: { Length: > 0 } path }) return;
+            var engine = Shell.EngineConnected;
+            await Task.Run(() => { using var file = File.Create(path); Log.Bundle(file, engine); });
+            ShowLogs(InfoBarSeverity.Success, "Logs saved", path);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Settings", "Couldn't save the logs", ex);
+            ShowLogs(InfoBarSeverity.Error, "Couldn't save the logs", ex.Message);
+        }
+        finally { SaveLogsButton.IsEnabled = true; }
+    }
+
+    private void OpenLogs_Click(object sender, RoutedEventArgs e)
+    {
+        Directory.CreateDirectory(Log.File.Directory);
+        Process.Start("explorer.exe", $"\"{Log.File.Directory}\"");
+    }
+
+    private void ShowLogs(InfoBarSeverity severity, string title, string message)
+    {
+        LogsBar.Severity = severity;
+        LogsBar.Title = title;
+        LogsBar.Message = message;
+        LogsBar.IsOpen = true;
+    }
 }

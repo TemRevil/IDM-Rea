@@ -250,6 +250,20 @@ function Test-VideoSettings($app) {
  Select-Nav $app 'All downloads'
 }
 
+# Settings > About > Logs: the buttons are there, and the app and engine logs have started.
+function Test-Logs($app) {
+ Select-Nav $app 'Settings'
+ Select-Section $app 'About'
+ Wait-For { Find-Named $app 'Email the logs' } 'the Email the logs button'
+ Wait-For { Find-Named $app 'Save a copy of the logs' } 'the Save a copy button'
+ $logs = Join-Path $env:IDMREA_DATA_DIRECTORY 'Logs'
+ Wait-For { (Test-Path (Join-Path $logs 'app.log')) -and (Select-String -Path (Join-Path $logs 'app.log') -Pattern 'Starting IDM-Rea' -Quiet) } 'the app log'
+ Wait-For { (Test-Path (Join-Path $logs 'engine.log')) -and (Select-String -Path (Join-Path $logs 'engine.log') -Pattern 'Starting the IDM-Rea engine' -Quiet) } 'the engine log'
+ Capture $app '07-settings-about.png'
+ Select-Section $app 'General'
+ Select-Nav $app 'All downloads'
+}
+
 # Start from an empty list: stop any engine on the test data folder and clear it.
 function Stop-Engine {
  try { Send-Engine @{command='shutdown'} 500 | Out-Null } catch { return }
@@ -275,6 +289,7 @@ try {
  Test-AddDialog $app
  Test-Settings $app
  Test-VideoSettings $app
+ Test-Logs $app
 
  # Closing the window must leave the engine downloading.
  Wait-For { @((Send-Engine @{command='list'}).jobs | Where-Object { $_.status -eq 'Downloading' }).Count -gt 0 } 'an active transfer'
@@ -300,8 +315,8 @@ try {
  $failure = $_
  "Interactive=$([Environment]::UserInteractive); capture session=$([Diagnostics.Process]::GetCurrentProcess().SessionId)" | Tee-Object -FilePath (Join-Path $captures 'diagnostics.txt')
  if ($app) { $app.Refresh(); $state = if ($app.HasExited) { "App exited with code $($app.ExitCode)" } else { "App session=$($app.SessionId); window=$($app.MainWindowHandle)" }; $state | Tee-Object -FilePath (Join-Path $captures 'diagnostics.txt') -Append }
- $startup = Join-Path $env:IDMREA_DATA_DIRECTORY 'app-startup.log'
- if (Test-Path $startup) { Get-Content $startup -Tail 40; Copy-Item $startup $captures }
+ $logs = Join-Path $env:IDMREA_DATA_DIRECTORY 'Logs'
+ foreach ($name in 'app.log','engine.log') { $log = Join-Path $logs $name; if (Test-Path $log) { Get-Content $log -Tail 40; Copy-Item $log $captures } }
  throw $failure
 } finally {
  if ($app -and !$app.HasExited) { Stop-Process -Id $app.Id -Force }

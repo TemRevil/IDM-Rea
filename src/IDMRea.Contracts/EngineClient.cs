@@ -7,6 +7,12 @@ namespace IDMRea.Contracts;
 /// <summary>One request, one reply over the engine pipe. Starts the engine when it is not running.</summary>
 public sealed class EngineClient
 {
+    /// <summary>A call that should be quick taking longer than this is logged as slow.</summary>
+    public static readonly TimeSpan Slow = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>Where calls that failed (the engine unreachable or hanging up) or were slow are noted; none if null.</summary>
+    public LogFile? Log { get; init; }
+
     public static async Task<NamedPipeClientStream> ConnectAsync(CancellationToken token)
     {
         var pipe = new NamedPipeClientStream(".", Protocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
@@ -16,14 +22,25 @@ public sealed class EngineClient
 
     public async Task<EngineResponse> SendAsync(EngineRequest request, CancellationToken token = default)
     {
-        // probe and add check the link first, which the engine allows up to Protocol.ProbeLimit.
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(request.Command switch
+        var started = Stopwatch.GetTimestamp();
+        try
         {
-            "probe" or "add" => Protocol.ProbeLimit + TimeSpan.FromSeconds(15),
-            "probeVideo" or "addVideo" or "updateVideoTools" => Protocol.VideoLimit + TimeSpan.FromSeconds(15),
-            _ => TimeSpan.FromSeconds(20),
-        });
+            var response = await SendQuietlyAsync(request, token);
+            var took = Stopwatch.GetElapsedTime(started);
+            if (took > Slow && Protocol.NetworkLimit(request.Command) is null) Log?.Write(LogLevel.Slow, "Engine", $"{request.Command} took {LogFile.Seconds(took)}");
+            return response;
+        }
+        catch (Exception ex) when (!token.IsCancellationRequested)
+        {
+            Log?.Warn("Engine", $"{request.Command} didn't get an answer after {LogFile.Seconds(Stopwatch.GetElapsedTime(started))}", ex);
+            throw;
+        }
+    }
+
+    private static async Task<EngineResponse> SendQuietlyAsync(EngineRequest request, CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter((Protocol.NetworkLimit(request.Command) ?? TimeSpan.FromSeconds(5)) + TimeSpan.FromSeconds(15));
         await using var pipe = await ConnectAsync(deadline.Token);
         using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, true);
         using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
@@ -36,11 +53,19 @@ public sealed class EngineClient
     {
         using var probe = new CancellationTokenSource(500);
         try { await SendAsync(new("list"), probe.Token); return; } catch (OperationCanceledException) { }
-        var path = enginePath ?? Path.Combine(AppContext.BaseDirectory, "engine", "IDMRea.Engine.exe");
-        if (!File.Exists(path)) throw new FileNotFoundException("The download engine is missing from the app folder.", path);
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true });
-        using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        var response = await SendAsync(new("list"), startup.Token);
-        if (!response.Ok) throw new IOException(response.Error ?? "The engine could not start.");
+        try
+        {
+            var path = enginePath ?? Path.Combine(AppContext.BaseDirectory, "engine", "IDMRea.Engine.exe");
+            if (!File.Exists(path)) throw new FileNotFoundException("The download engine is missing from the app folder.", path);
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true });
+            using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var response = await SendQuietlyAsync(new("list"), startup.Token);
+            if (!response.Ok) throw new IOException(response.Error ?? "The engine could not start.");
+        }
+        catch (Exception ex)
+        {
+            Log?.Error("Engine", "The download engine didn't start", ex);
+            throw;
+        }
     }
 }

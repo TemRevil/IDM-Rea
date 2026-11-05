@@ -25,7 +25,7 @@ public sealed partial class MainWindow : Window
 
     public static MainWindow Instance { get; private set; } = null!;
     public AppState State { get; } = new();
-    public EngineClient Client { get; } = new();
+    public EngineClient Client { get; } = new() { Log = Log.File };
     public bool EngineConnected => subscription.Connected;
     public event Action? EngineStateChanged;
     /// <summary>The 256 px icon in the current accent colour, once drawn.</summary>
@@ -140,7 +140,7 @@ public sealed partial class MainWindow : Window
             IconPng = png;
             IconChanged?.Invoke();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { App.Log("icon: " + ex.Message); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log.Warn("Window", "Couldn't draw the app's icon", ex); }
     }
 
     /// <summary>
@@ -213,6 +213,7 @@ public sealed partial class MainWindow : Window
     private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (args.SelectedItem is not NavigationViewItem { Tag: string tag }) return;
+        Log.Where = tag == "settings" ? "settings" : "downloads";
         if (tag == "settings") { if (ContentFrame.Content is not SettingsPage) ContentFrame.Navigate(typeof(SettingsPage)); return; }
         State.Filter = tag;
         if (ContentFrame.Content is not DownloadsPage) ContentFrame.Navigate(typeof(DownloadsPage));

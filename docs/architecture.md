@@ -89,7 +89,7 @@ Stored in `%LOCALAPPDATA%\IDMRea`; `IDMREA_DATA_DIRECTORY` overrides it (used by
 | `engine.lock` | held by the running engine |
 | `app-theme.txt` | the theme, read before the first frame so the window doesn't flash |
 | `icons\ring-RRGGBB.ico/png` | the icon drawn in each accent colour used |
-| `app-startup.log` | app start-up errors |
+| `Logs\app.log`, `engine.log`, `host.log` | what went wrong or was slow in the app, the engine and the browser link (below) |
 | `tools\` | yt-dlp, Deno and FFmpeg, with yt-dlp's version and when it was last checked |
 | `temp\` | yt-dlp's cookies file, only while it runs |
 | `browser\com.idmrea.host.json` | the native host manifest, written by "Add to browser" (rewritten only when it changes, never half-written) |
@@ -98,6 +98,16 @@ Stored in `%LOCALAPPDATA%\IDMRea`; `IDMREA_DATA_DIRECTORY` overrides it (used by
 "Add to browser" also points `HKCU\Software\{Google\Chrome, Microsoft\Edge, Chromium}\NativeMessagingHosts\com.idmrea.host` at that manifest, and writes `%LOCALAPPDATA%\IDMRea\browser-target.txt` with the data folder the host should use (the browser starts it without the app's environment; an `IDMREA_DATA_DIRECTORY` in the browser's own environment wins). Cookies sent with a browser download are stored with the job encrypted for the current Windows user (DPAPI).
 
 The database contains download URLs; never commit it. Nothing here protects against another process running as the same user.
+
+### Logs
+
+`Logs\` holds one plain-text log per process: `app.log`, `engine.log` and `host.log` (`LogFile` in Contracts). A line is the time, the level (INFO, SLOW, FREEZE, WARNING, ERROR, CRASH), where, and what, with any exception's stack indented under it. Past 1 MB a log moves to `name.1.log`, and only the newest four old ones are kept.
+
+- **App:** start, errors nobody caught, the window not answering for 0.5 s or more (a watch thread pings the UI thread every 0.1 s; a hang past 5 s is logged while it lasts), and engine calls that failed or, for calls that should be quick, took over 1.5 s. Each start it also copies in what Windows' Application event log recorded since its last look (a week back the first time): Application Error 1000, .NET Runtime 1026 and Application Hang 1002 for `IDMRea.App.exe`, `IDMRea.Engine.exe` or `IDMRea.BrowserHost.exe`, matched on the program the report names. `windows-reports-checked.txt` remembers when it last looked.
+- **Engine:** start and stop, errors nobody caught, requests that failed (a bad link or a missing ID as one line, anything unexpected with its stack) or were slow, and each download that failed: its file name, the server's name and why. Never the whole link or cookies, which can carry a sign-in.
+- **Browser link:** only problems, since the browser starts it for every message: errors nobody caught, unreadable messages, an engine that wouldn't start or answer.
+
+Settings > About > Logs zips every `.log` there with an `about.txt` (versions, Windows, time zone). "Email the logs" writes the zip to `%TEMP%\IDM-Rea`, selects it in Explorer and opens a `mailto:` message, since a mail link can't attach a file. Nothing is sent by IDM-Rea itself.
 
 ## Look
 

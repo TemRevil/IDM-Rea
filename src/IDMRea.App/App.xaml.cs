@@ -32,19 +32,9 @@ public partial class App : Application
 
     [DllImport("user32.dll")] private static extern bool AllowSetForegroundWindow(uint processId);
 
-    internal static void Log(string message)
-    {
-        try
-        {
-            Directory.CreateDirectory(Protocol.DataDirectory);
-            File.AppendAllText(Path.Combine(Protocol.DataDirectory, "app-startup.log"), $"{DateTimeOffset.UtcNow:O} {message}{Environment.NewLine}");
-        }
-        catch (IOException) { }
-    }
-
     public App()
     {
-        UnhandledException += (_, e) => Log($"Unhandled: {e.Exception}");
+        UnhandledException += (_, e) => Log.Crash("App", $"IDM-Rea closed on an error it didn't expect ({Log.Place}): {e.Message}", e.Exception);
         InitializeComponent();
     }
 
@@ -53,10 +43,12 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        window = new MainWindow();
         var queue = DispatcherQueue.GetForCurrentThread();
+        Log.Start(queue);
+        window = new MainWindow();
         AppInstance.GetCurrent().Activated += (_, e) => queue.TryEnqueue(() => window.Reactivate(Arguments(e)));
         window.Activate();
+        Log.Where = "downloads"; // until now the window was still being built: "while starting"
         window.Handle(Arguments(AppInstance.GetCurrent().GetActivatedEventArgs()));
     }
 }

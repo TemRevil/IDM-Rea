@@ -148,6 +148,11 @@ public sealed class DownloadTests
             Assert.True((await client.SendAsync(new("shutdown"))).Ok); await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10)); process.Dispose();
             process = Start(); Assert.Equal(DownloadStatus.Completed, Assert.Single((await client.SendAsync(new("list"))).Jobs!).Status);
             await client.SendAsync(new("shutdown")); await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            // A clean stop: no crash on the way out (Windows used to record one on every exit), and nothing logged as one.
+            Assert.Equal(0, process.ExitCode);
+            var log = File.ReadAllText(Path.Combine(dir, "Logs", "engine.log"));
+            Assert.Contains("Starting the IDM-Rea engine", log);
+            Assert.DoesNotContain("CRASH", log);
         }
         finally { if (process != null) { if (!process.HasExited) process.Kill(true); process.Dispose(); } Environment.SetEnvironmentVariable("IDMREA_DATA_DIRECTORY", old); }
     }

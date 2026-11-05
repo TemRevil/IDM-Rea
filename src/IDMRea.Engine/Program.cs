@@ -10,8 +10,13 @@ FileStream ownership;
 try { ownership = new FileStream(Path.Combine(Protocol.DataDirectory, "engine.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
 catch (IOException) { return 2; }
 using var owned = ownership;
-using var stopped = new CancellationTokenSource();
-using var finished = new ManualResetEventSlim();
+var log = new LogFile(Protocol.LogsDirectory, "engine");
+log.Info("Engine", $"Starting the IDM-Rea engine {typeof(EngineHost).Assembly.GetName().Version?.ToString(3)} on {Environment.OSVersion.VersionString}, .NET {Environment.Version}");
+AppDomain.CurrentDomain.UnhandledException += (_, e) => log.Crash("Engine", "The engine closed on an error it didn't expect", e.ExceptionObject as Exception);
+TaskScheduler.UnobservedTaskException += (_, e) => log.Error("Engine", "A background task failed and nothing was waiting for it", e.Exception);
+// Not disposed: ProcessExit runs after the last line here, and cancelling a disposed source crashed every exit.
+var stopped = new CancellationTokenSource();
+var finished = new ManualResetEventSlim();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; stopped.Cancel(); };
 // Windows shutdown or a kill request: stop serving and let the manager save running jobs as paused by the engine.
 AppDomain.CurrentDomain.ProcessExit += (_, _) => { stopped.Cancel(); finished.Wait(TimeSpan.FromSeconds(5)); };
@@ -33,7 +38,8 @@ try
 #if WINDOWS
     windows.Attach(manager, stopped);
 #endif
-    await new EngineHost(manager, shell, video).RunAsync(stopped.Token);
+    await new EngineHost(manager, shell, video, log).RunAsync(stopped.Token);
+    log.Info("Engine", "Stopped");
 }
 finally { finished.Set(); }
 return 0;

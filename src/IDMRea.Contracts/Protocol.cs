@@ -35,7 +35,16 @@ public static class Protocol
     /// <summary>The longest asking yt-dlp about a page may take (it runs the site's player code); <c>probeVideo</c>,
     /// <c>addVideo</c> and <c>updateVideoTools</c> replies can take this long.</summary>
     public static readonly TimeSpan VideoLimit = TimeSpan.FromSeconds(90);
+    /// <summary>How long a command may wait on the network (checking a link, running yt-dlp); null for the ones that should be quick.</summary>
+    public static TimeSpan? NetworkLimit(string command) => command switch
+    {
+        "probe" or "add" => ProbeLimit,
+        "probeVideo" or "addVideo" or "updateVideoTools" => VideoLimit,
+        _ => null,
+    };
     public static string DataDirectory => Path.GetFullPath(Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IDMRea"));
+    /// <summary>app.log, engine.log and host.log: crashes, errors and anything slow, kept on this PC until someone sends them.</summary>
+    public static string LogsDirectory => Path.Combine(DataDirectory, "Logs");
     /// <summary>The copy of the extension the browser loads: kept in the data folder so it survives the app being updated or moved.</summary>
     public static string ExtensionFolderFor(string dataFolder) => Path.Combine(Path.GetFullPath(dataFolder), "browser", "extension");
     public static string PipeName => "IDMRea." + FolderHash(DataDirectory);

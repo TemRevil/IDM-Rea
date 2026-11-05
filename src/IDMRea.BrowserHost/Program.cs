@@ -8,7 +8,12 @@ var home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Loca
 if (HostHandler.ChooseDataFolder(home, Environment.GetEnvironmentVariable("IDMREA_DATA_DIRECTORY")) is { } folder)
     Environment.SetEnvironmentVariable("IDMREA_DATA_DIRECTORY", folder);
 
-var client = new EngineClient();
+// The browser starts this for every message, so only problems are logged, never each start.
+var log = new LogFile(Protocol.LogsDirectory, "host");
+AppDomain.CurrentDomain.UnhandledException += (_, e) => log.Crash("Host", "The browser link closed on an error it didn't expect", e.ExceptionObject as Exception);
+TaskScheduler.UnobservedTaskException += (_, e) => log.Error("Host", "A background task failed and nothing was waiting for it", e.Exception);
+
+var client = new EngineClient { Log = log };
 var engine = Path.Combine(AppContext.BaseDirectory, "IDMRea.Engine.exe");
 var handler = new HostHandler(async request => { await client.EnsureStartedAsync(engine); return await client.SendAsync(request); }, OpenApp);
 
@@ -27,7 +32,11 @@ try
             try { await NativeMessaging.WriteAsync(output, reply); } finally { writing.Release(); }
         }));
 }
-catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or System.Text.Json.JsonException) { return 1; }
+catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or System.Text.Json.JsonException)
+{
+    log.Warn("Host", "The browser sent a message that couldn't be read", ex);
+    return 1;
+}
 await Task.WhenAll(pending);
 return 0;
 

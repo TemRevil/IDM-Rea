@@ -25,7 +25,8 @@ public sealed class NullShell : IEngineShell
 }
 
 /// <summary>Serves the engine pipe: one JSON request line, one JSON reply line; <c>subscribe</c> keeps the line open for pushes.</summary>
-public sealed class EngineHost(DownloadManager manager, IEngineShell shell, VideoSupport? video = null)
+/// <param name="log">Where requests that failed or were slow, and downloads that failed, are noted; none if null.</param>
+public sealed class EngineHost(DownloadManager manager, IEngineShell shell, VideoSupport? video = null, LogFile? log = null)
 {
     private static readonly TimeSpan PushEvery = TimeSpan.FromMilliseconds(250), ReadTimeout = TimeSpan.FromSeconds(15);
     private readonly object gate = new();
@@ -42,7 +43,7 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell, Vide
     public async Task RunAsync(CancellationToken stop)
     {
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(stop);
-        manager.JobChanged += OnChanged; manager.JobRemoved += OnRemoved; manager.JobFinished += shell.Notify; manager.SettingsChanged += OnSettings;
+        manager.JobChanged += OnChanged; manager.JobRemoved += OnRemoved; manager.JobFinished += shell.Notify; manager.JobFinished += OnFinished; manager.SettingsChanged += OnSettings;
         var connections = new List<Task>();
         var pending = CreatePipe();
         try
@@ -63,7 +64,7 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell, Vide
         {
             pending.Dispose(); stopping.Cancel();
             await Task.WhenAll(connections);
-            manager.JobChanged -= OnChanged; manager.JobRemoved -= OnRemoved; manager.JobFinished -= shell.Notify; manager.SettingsChanged -= OnSettings;
+            manager.JobChanged -= OnChanged; manager.JobRemoved -= OnRemoved; manager.JobFinished -= shell.Notify; manager.JobFinished -= OnFinished; manager.SettingsChanged -= OnSettings;
         }
     }
 
@@ -71,6 +72,16 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell, Vide
         PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
     private void OnChanged(DownloadJob job) { lock (gate) foreach (var s in subscribers) { lock (s) s.Changed.Add(job.Id); s.Wake(); } }
+
+    /// <summary>A download that has just failed: its file name, the server's name and why. Never the whole link, which
+    /// can carry a sign-in token.</summary>
+    private void OnFinished(DownloadJob job)
+    {
+        if (log is null || job.Status != DownloadStatus.Failed) return;
+        var server = Uri.TryCreate(job.Url, UriKind.Absolute, out var uri) ? uri.Host : "an unreadable link";
+        var status = job.HttpStatus is int code ? $", HTTP {code}" : "";
+        log.Warn("Download", $"{Path.GetFileName(job.Destination)} from {server} failed: {job.Error} ({job.ErrorKind}{status})");
+    }
     private void OnRemoved(Guid id) { lock (gate) foreach (var s in subscribers) { lock (s) { s.Changed.Remove(id); s.Removed.Add(id); } s.Wake(); } }
     private void OnSettings(EngineSettings settings) { shell.SettingsChanged(settings); lock (gate) foreach (var s in subscribers) { lock (s) s.SettingsChanged = true; s.Wake(); } }
 
@@ -92,9 +103,21 @@ public sealed class EngineHost(DownloadManager manager, IEngineShell shell, Vide
                 request = JsonSerializer.Deserialize<EngineRequest>(line, Protocol.Json) ?? throw new InvalidDataException("Missing request.");
                 if (request.Version is not (1 or 2)) throw new InvalidDataException("Unsupported protocol version.");
                 if (request.Command == "subscribe") { await SubscribeAsync(reader, writer, stopping.Token); return; }
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 response = await HandleAsync(request, stopping.Token);
+                var took = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+                if (took > EngineClient.Slow && Protocol.NetworkLimit(request.Command) is null) log?.Write(LogLevel.Slow, "Request", $"{request.Command} took {LogFile.Seconds(took)}");
             }
-            catch (Exception ex) when (!stopping.IsCancellationRequested) { response = new(false, Error: ErrorText(ex), Version: Protocol.CurrentVersion); }
+            catch (Exception ex) when (!stopping.IsCancellationRequested)
+            {
+                response = new(false, Error: ErrorText(ex), Version: Protocol.CurrentVersion);
+                // A bad link or a missing ID is the asker's mistake and its text says it all; anything else gets its stack.
+                var what = request?.Command ?? "A request that couldn't be read";
+                if (ex is ArgumentException or InvalidDataException or JsonException or InvalidOperationException or KeyNotFoundException
+                    or TransferException or HttpRequestException or VideoException or PlatformNotSupportedException)
+                    log?.Warn("Request", $"{what} failed: {response.Error}");
+                else log?.Error("Request", $"{what} failed on an error it didn't expect", ex);
+            }
             await writer.WriteLineAsync(JsonSerializer.Serialize(response, Protocol.Json).AsMemory(), stopping.Token);
             if (request?.Command == "shutdown" && response.Ok) stopping.Cancel();
         }

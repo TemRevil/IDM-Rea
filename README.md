@@ -24,6 +24,7 @@ A Windows download manager written in C# with WinUI 3. It contains no IDM code o
   - A "Download video" button on a playing video (not on small or silent background clips), with the qualities to choose from. The toolbar menu offers the page's video too.
 - **Settings**, in tabs: downloads at once, parts per file, a shared speed limit, retries, what closing the window does, start with Windows, notifications, theme, per-type folders, the browser link, and the video tools (their state, Set up now, Update now).
 - **Follows Windows.** Light or dark mode and the Windows accent colour. The icon is drawn in the accent colour too.
+- **Logs to send when something goes wrong.** The app, the engine and the browser link note crashes, errors, failed downloads, moments the window stopped responding and anything slow, and the app copies in the crash reports Windows keeps for IDM-Rea. They stay on the PC and keep only the last few megabytes. Settings > About > Logs packs them into a .zip to email to temrevil@gmail.com, save, or open.
 
 ## Build and run
 
