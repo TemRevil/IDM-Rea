@@ -94,7 +94,8 @@ public sealed class VideoJobTests : IDisposable
         var joiner = new Joiner { HangFirst = true };
         await using var manager = Manager(web, new Streams(), joiner);
         var job = await manager.AddVideoAsync(Page, "299+140", Folder);
-        await Until(manager, job.Id, j => j.Video?.Stage == VideoStage.Joining && joiner.Calls == 1);
+        await joiner.Hanging.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal(VideoStage.Joining, manager.Snapshot().Single().Video?.Stage);
         Assert.Equal(3, Directory.EnumerateFiles(Folder, "*.part").Count()); // two streams and the join under way
         await manager.RemoveAsync(job.Id, false);
         Assert.Empty(Directory.EnumerateFiles(Folder));
@@ -125,6 +126,8 @@ public sealed class VideoJobTests : IDisposable
         private int calls;
         public int Calls => Volatile.Read(ref calls);
         public bool HangFirst { get; init; }
+        /// <summary>Set once the first join has written its output and is hanging.</summary>
+        public TaskCompletionSource Hanging { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public List<byte[][]> Seen { get; } = [];
         public async Task JoinAsync(IReadOnlyList<string> inputs, string output, string container, CancellationToken token)
         {
@@ -134,6 +137,7 @@ public sealed class VideoJobTests : IDisposable
             if (HangFirst && n == 1)
             {
                 await File.WriteAllBytesAsync(output, [1, 2, 3], token);
+                Hanging.TrySetResult();
                 await Task.Delay(Timeout.Infinite, token);
             }
             await File.WriteAllBytesAsync(output, parts.SelectMany(p => p).ToArray(), token);
