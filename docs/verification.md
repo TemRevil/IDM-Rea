@@ -19,6 +19,7 @@ They cover, against a local HTTP server with switchable faults:
 - Settings, file names, categories, sidebar counts, search (Arabic-Indic digits search as 0-9) and the drawn icon.
 - Browser downloads: the referrer, cookies and user agent reach the server on the check and on every part; cookies are never stored in plain text, survive a restart, and never reach another host after a redirect; a download without a folder goes to its type's folder; the SHA-256 check (a match is marked verified, a mismatch fails with a plain reason and Retry downloads again).
 - The native host: its framing, the folder it chooses, and an `add` that goes through the engine; the registry keys and manifest "Add to browser" writes, the extension copy it keeps current, its plain refusal when the extension is missing, and finding Chrome and Edge from App Paths.
+- Videos: choosing qualities from real yt-dlp output (codec order, matching sound, sound only, a stream yt-dlp can't describe), HLS lists (master, media, init segment, byte ranges, keys, live and DRM refused), segment downloads (in order, AES-128 with both IV kinds, resume after a crash, a junk tail cut off), a direct stream asked for in chunks, an expired address asked for again once, the join's FFmpeg arguments and error text, the tools' setup (checksums, flat unpacking, daily update, no swap while in use), the engine's video commands, and a page's file name and quality.
 - The tray menu: status line, which actions are enabled, the ticked speed limit (including one typed in Settings), and what each item does. A speed limit changed inside the engine is pushed to an open app.
 
 The Recycle Bin test runs only with `IDMREA_TEST_RECYCLE=1`, because each run leaves its test file in the real Recycle Bin. CI sets it.
@@ -27,6 +28,15 @@ The Recycle Bin test runs only with `IDMREA_TEST_RECYCLE=1`, because each run le
 
 - `npm test` in `src/IDMRea.Extension`: 31 tests of the rules (file or page, warnings, list parsing, link candidates, sizes and checksums in the page text, the tab, redirect and layer rules). Each rule was also broken on purpose, one at a time (46 changes), and every change turned a test red.
 - `node scripts/check-extension.mjs`: Playwright's Chromium, headless, with the extension, a real native host and a real engine on their own data folder, against the fixture's trap pages. All 20 checks passed: the files found with type, size and checksum; the fake 4.2 GB installer called out; the ad link left out; the toolbar count; an invisible layer and an empty layer taken away with the link under them working; no tab from a click on empty space; only the mirror from a link to it; a fake button's ad tab closed; an ad redirect sent back; a malware-listed site blocked and "Continue anyway"; a browser download taken over, checked against the page's checksum, saved with the right bytes and gone from the browser. Breaking the layer, new-tab and redirect guards at once turned exactly those three checks red.
+
+## Real videos
+
+`node scripts/check-video.mjs --fresh`, 2026-11-05: a real engine on its own data folder set up yt-dlp 2026.10.26, Deno and FFmpeg from their official releases (checksums checked), then:
+
+- "Me at the zoo" from YouTube at 144p: picture and sound fetched as two streams and joined, named `Me at the zoo (144p).mp4`; ffprobe sees video and audio and 19 s; no part files left.
+- A 6-second clip made with that FFmpeg as an AES-128 encrypted HLS list of 2-second segments, served from the PC: offered as "Video MP4", downloaded, decrypted and joined; ffprobe sees video and audio and 6 s.
+
+All 20 checks passed. The first run failed the HLS check ("found no video"): yt-dlp reports a bare HLS list without codecs or height, and such streams were dropped. They are now offered as one choice, with a test.
 
 ## The real app
 
@@ -71,3 +81,4 @@ In the first 30 s after the window opens, .NET start-up alone uses about 15 % of
 - A live change of the Windows accent colour (changing it is a system setting).
 - A signed installer, which doesn't exist yet.
 - The extension in branded Chrome and Edge by hand (they no longer load extensions from the command line, so the check uses Playwright's Chromium), and on real download sites.
+- Videos from sites other than YouTube, and DASH-only sites beyond the direct streams yt-dlp offers for them.

@@ -26,10 +26,19 @@ public sealed class VideoEngineTests
     private sealed class Slow : HttpMessageHandler
     {
         private int calls;
+        private readonly TaskCompletionSource asked = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Calls => Volatile.Read(ref calls);
+        /// <summary>The setup runs in the background: the number of requests is read once the first one came, plus a moment.</summary>
+        public async Task<int> CallsOnceAskedAsync()
+        {
+            await asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.Delay(300);
+            return Calls;
+        }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             Interlocked.Increment(ref calls);
+            asked.TrySetResult();
             await Task.Delay(Timeout.Infinite, token);
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
@@ -99,7 +108,7 @@ public sealed class VideoEngineTests
             Assert.True(reply.Tools!.Installing);
             Assert.False(reply.Tools.Ready);
         }
-        Assert.Equal(1, releases.Calls); // one setup, not one per question
+        Assert.Equal(1, await releases.CallsOnceAskedAsync()); // one setup, not one per question
         Assert.Equal(0, runner.Runs);
         var status = await host.Send(new("videoTools", Version: Protocol.CurrentVersion));
         Assert.True(status.Tools!.Installing);
@@ -115,7 +124,7 @@ public sealed class VideoEngineTests
         Assert.True(reply.Ok, reply.Error);
         Assert.True(reply.Tools!.Installing);
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5));
-        Assert.Equal(1, releases.Calls);
+        Assert.Equal(1, await releases.CallsOnceAskedAsync());
     }
 
     [Fact]
