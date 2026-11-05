@@ -185,6 +185,12 @@ public sealed partial class AddDownloadDialog : ContentDialog
         try
         {
             IsPrimaryButtonEnabled = IsSecondaryButtonEnabled = false;
+            if (video != null)
+            {
+                // yt-dlp reads the page again for the chosen quality's addresses: a few seconds.
+                Probing.Visibility = Visibility.Visible; Probing.IsActive = true;
+                InfoLine.Text = "Preparing the video...";
+            }
             var reply = await Shell.Client.SendAsync(video != null && Chosen() is { } choice
                 ? new("addVideo", video.PageUrl, FolderBox.Text.Trim(), StartPaused: startPaused, Choice: choice.Id)
                 : new("add", UrlBox.Text.Trim(), FolderBox.Text.Trim(), FileName: NameBox.Text.Trim(), StartPaused: startPaused));
@@ -196,6 +202,7 @@ public sealed partial class AddDownloadDialog : ContentDialog
         }
         finally
         {
+            Probing.IsActive = false; Probing.Visibility = Visibility.Collapsed;
             if (args.Cancel) Update();
             deferral.Complete();
         }

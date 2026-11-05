@@ -44,7 +44,8 @@ public sealed partial class DetailsPane : UserControl
             var current = video.Streams.FirstOrDefault(s => !s.Done) ?? video.Streams.LastOrDefault();
             Parts.Show(current is null ? job : job with { Parts = current.Parts, TotalBytes = current.TotalBytes, ReceivedBytes = current.ReceivedBytes });
             var done = video.Streams.Count(s => s.Done);
-            PartsText.Text = video.Stage == VideoStage.Joining ? "Putting picture and sound together"
+            PartsText.Text = job.Status == DownloadStatus.Completed ? (video.Streams.Count > 1 ? "Picture and sound, joined" : "One stream")
+                : video.Stage == VideoStage.Joining ? "Putting picture and sound together"
                 : video.Streams.Count > 1 ? $"{done} of {video.Streams.Count} streams fetched, joined at the end" : "One stream";
         }
         else
