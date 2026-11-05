@@ -76,7 +76,8 @@ public sealed partial class VideoResolver(IToolRunner runner, string tempFolder,
         string? cookies = null;
         try
         {
-            if (!string.IsNullOrEmpty(headers?.Cookies))
+            // Never the page's cookies for a media address on another host.
+            if (!string.IsNullOrEmpty(headers?.Cookies) && headers.CookiesGoTo(new Uri(url)))
             {
                 Directory.CreateDirectory(tempFolder);
                 cookies = Path.Combine(tempFolder, $"cookies-{Guid.NewGuid():N}.txt");
@@ -93,18 +94,18 @@ public sealed partial class VideoResolver(IToolRunner runner, string tempFolder,
         finally { if (cookies != null) File.Delete(cookies); }
     }
 
-    /// <summary>The browser's cookies for the page, in the Netscape layout yt-dlp reads, for the site and its subdomains.</summary>
+    /// <summary>The browser's cookies for the page, in the Netscape layout yt-dlp reads, for the page's host only.</summary>
     private static string CookieFile(string url, string header)
     {
         var uri = new Uri(url);
-        var host = uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..] : uri.Host;
+        var host = uri.IdnHost;
         var secure = uri.Scheme == "https" ? "TRUE" : "FALSE";
         var text = new StringBuilder("# Netscape HTTP Cookie File\n");
         foreach (var pair in header.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             var eq = pair.IndexOf('=');
             if (eq <= 0) continue;
-            text.Append('.').Append(host).Append("\tTRUE\t/\t").Append(secure).Append("\t0\t").Append(pair[..eq]).Append('\t').Append(pair[(eq + 1)..]).Append('\n');
+            text.Append(host).Append("\tFALSE\t/\t").Append(secure).Append("\t0\t").Append(pair[..eq]).Append('\t').Append(pair[(eq + 1)..]).Append('\n');
         }
         return text.ToString();
     }

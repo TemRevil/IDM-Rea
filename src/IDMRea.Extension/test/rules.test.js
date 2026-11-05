@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DomainSet, parseAbp, parseHosts } from '../lib/lists.js';
 import { checksumNear, expectedBytes, extensionOf, isCandidate, westernDigits } from '../lib/links.js';
-import { sameSite, siteOf, isFileHost } from '../lib/sites.js';
+import { hostOf, sameSite, siteOf, isFileHost, isPrivateHost, probePlan } from '../lib/sites.js';
 import { classify, formatBytes, nameFromDisposition, sniff } from '../lib/verdict.js';
 
 const GiB = 1024 ** 3, MiB = 1024 ** 2;
@@ -144,4 +144,22 @@ test('sizes read like the app shows them', () => {
   assert.equal(formatBytes(1536), '1.5 KB');
   assert.equal(formatBytes(2 * MiB), '2 MB');
   assert.equal(formatBytes(150 * GiB), '150 GB');
+});
+
+test('link checks send sign-in cookies only to the site of the page', () => {
+  assert.deepEqual(probePlan('https://dl.example.com/game.zip', 'https://www.example.com/downloads'), { credentials: 'include' });
+  assert.deepEqual(probePlan('https://cdn.other.net/game.zip', 'https://www.example.com/downloads'), { credentials: 'omit' });
+  assert.deepEqual(probePlan('https://bank.test/logout', 'https://evil.example/page'), { credentials: 'omit' });
+});
+
+test('a public page cannot make the extension reach the local network', () => {
+  for (const host of ['127.0.0.1', 'localhost', 'router.localhost', '10.0.0.1', '172.16.5.4', '172.31.255.255', '192.168.1.1',
+    '169.254.169.254', '0.0.0.0', '[::1]', '[fe80::1]', '[fd00::5]']) {
+    assert.ok(isPrivateHost(hostOf(`http://${host}/`)), host);
+    assert.equal(probePlan(`http://${host}/admin.zip`, 'https://evil.example/page'), null, host);
+  }
+  for (const host of ['172.32.0.1', '8.8.8.8', 'example.com', '192.169.0.1']) assert.ok(!isPrivateHost(host), host);
+  // A page served from the local network may still have its own files checked.
+  assert.deepEqual(probePlan('http://192.168.1.1/fw.bin', 'http://192.168.1.1/'), { credentials: 'include' });
+  assert.deepEqual(probePlan('http://127.0.0.1:8080/a.zip', 'http://127.0.0.1:8080/files.html'), { credentials: 'include' });
 });

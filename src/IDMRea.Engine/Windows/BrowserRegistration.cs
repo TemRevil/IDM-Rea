@@ -27,7 +27,7 @@ public sealed class BrowserRegistration(string keyPrefix = "Software")
         var folder = Path.Combine(dataFolder, "browser");
         Directory.CreateDirectory(folder);
         var manifest = Path.Combine(folder, HostName + ".json");
-        File.WriteAllText(manifest, JsonSerializer.Serialize(new
+        WriteIfChanged(manifest, JsonSerializer.Serialize(new
         {
             name = HostName,
             description = "IDM-Rea download engine",
@@ -38,26 +38,48 @@ public sealed class BrowserRegistration(string keyPrefix = "Software")
         foreach (var browser in Browsers)
         {
             using var key = Registry.CurrentUser.CreateSubKey($@"{keyPrefix}\{browser}\NativeMessagingHosts\{HostName}", writable: true);
-            key.SetValue("", manifest, RegistryValueKind.String);
+            if (key.GetValue("") as string != manifest) key.SetValue("", manifest, RegistryValueKind.String);
         }
         Directory.CreateDirectory(home);
-        File.WriteAllText(Path.Combine(home, TargetFileName), dataFolder);
+        WriteIfChanged(Path.Combine(home, TargetFileName), dataFolder);
         Mirror(extensionSource, Protocol.ExtensionFolderFor(dataFolder));
     }
 
-    /// <summary>Makes <paramref name="target"/> an exact copy of <paramref name="source"/>, built beside it first.</summary>
+    // The browser reads these files whenever the extension talks to IDM-Rea and while it runs, and every engine start
+    // calls Register: files are written only when their content changes, and never left half-written.
+    private static void WriteIfChanged(string path, string text)
+    {
+        if (File.Exists(path) && File.ReadAllText(path) == text) return;
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, text);
+        File.Move(temp, path, overwrite: true);
+    }
+
+    /// <summary>Makes <paramref name="target"/> an exact copy of <paramref name="source"/>, touching only the files that
+    /// differ. The folder itself stays: a browser running the extension from it would otherwise see it vanish.</summary>
     private static void Mirror(string source, string target)
     {
-        var fresh = target + ".new";
-        if (Directory.Exists(fresh)) Directory.Delete(fresh, recursive: true);
+        Directory.CreateDirectory(target);
         foreach (var dir in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(Path.Combine(fresh, Path.GetRelativePath(source, dir)));
-        Directory.CreateDirectory(fresh);
+            Directory.CreateDirectory(Path.Combine(target, Path.GetRelativePath(source, dir)));
+        var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
-            File.Copy(file, Path.Combine(fresh, Path.GetRelativePath(source, file)));
-        if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-        Directory.Move(fresh, target);
+        {
+            var relative = Path.GetRelativePath(source, file);
+            wanted.Add(relative);
+            var copy = Path.Combine(target, relative);
+            if (File.Exists(copy) && SameBytes(file, copy)) continue;
+            File.Copy(file, copy + ".tmp", overwrite: true);
+            File.Move(copy + ".tmp", copy, overwrite: true);
+        }
+        foreach (var file in Directory.EnumerateFiles(target, "*", SearchOption.AllDirectories))
+            if (!wanted.Contains(Path.GetRelativePath(target, file))) File.Delete(file);
+        foreach (var dir in Directory.EnumerateDirectories(target, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length))
+            if (!Directory.Exists(Path.Combine(source, Path.GetRelativePath(target, dir))) && !Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir);
     }
+
+    private static bool SameBytes(string a, string b) =>
+        new FileInfo(a).Length == new FileInfo(b).Length && File.ReadAllBytes(a).AsSpan().SequenceEqual(File.ReadAllBytes(b));
 
     /// <summary>Rewrites the host path (the app may have moved) only when the registration belongs to this data folder.</summary>
     public bool RefreshIfOwned(string hostExe, string dataFolder, string home, string extensionSource)

@@ -67,11 +67,24 @@ public sealed class VideoResolverTests : IDisposable
             seen = File.ReadAllText(args[at + 1]);
             Assert.DoesNotContain(args, a => a.Contains("abc123"));
         });
-        var headers = new RequestHeaders("https://www.youtube.com/", "SID=abc123; PREF=f6=40", "Mozilla/5.0 Test", null);
-        await Resolver(runner).ResolveAsync("https://www.youtube.com/watch?v=jNQXAC9IVRw", headers, default);
-        Assert.Contains(".youtube.com\tTRUE\t/\tTRUE\t0\tSID\tabc123", seen);
-        Assert.Contains(".youtube.com\tTRUE\t/\tTRUE\t0\tPREF\tf6=40", seen);
+        var page = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+        var headers = new RequestHeaders("https://www.youtube.com/", "SID=abc123; PREF=f6=40", "Mozilla/5.0 Test", page);
+        await Resolver(runner).ResolveAsync(page, headers, default);
+        // For the page's own host only, like the browser's host cookies: not its subdomains.
+        Assert.Contains("\nwww.youtube.com\tFALSE\t/\tTRUE\t0\tSID\tabc123\n", seen);
+        Assert.Contains("\nwww.youtube.com\tFALSE\t/\tTRUE\t0\tPREF\tf6=40\n", seen);
         Assert.Empty(Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories));
+        Assert.Contains("--user-agent", runner.Args!);
+    }
+
+    [Fact]
+    public async Task ThePagesCookiesNeverGoToAnotherHost()
+    {
+        // The page's media can live on another host (a CDN, an ad server): yt-dlp is asked about it without the page's cookies.
+        var runner = new FakeRunner(Fixture("youtube-zoo.json"));
+        var headers = new RequestHeaders("https://shop.test/watch", "SID=abc123", "Mozilla/5.0 Test", "https://shop.test/watch");
+        await Resolver(runner).ResolveAsync("https://cdn.elsewhere.test/clip.m3u8", headers, default);
+        Assert.DoesNotContain("--cookies", runner.Args!);
         Assert.Contains("--user-agent", runner.Args!);
     }
 

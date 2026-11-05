@@ -11,7 +11,7 @@ public static class RequestHeadersExtensions
     {
         if (headers is null) return;
         if (Uri.TryCreate(headers.Referrer, UriKind.Absolute, out var referrer) && referrer.Scheme is "http" or "https") request.Headers.Referrer = referrer;
-        if (!string.IsNullOrEmpty(headers.Cookies) && SameHost(headers.CookiesFor, request.RequestUri)) request.Headers.TryAddWithoutValidation("Cookie", headers.Cookies);
+        if (!string.IsNullOrEmpty(headers.Cookies) && headers.CookiesGoTo(request.RequestUri)) request.Headers.TryAddWithoutValidation("Cookie", headers.Cookies);
         if (!string.IsNullOrEmpty(headers.UserAgent)) request.Headers.TryAddWithoutValidation("User-Agent", headers.UserAgent);
         foreach (var (name, value) in headers.Extra ?? new Dictionary<string, string>())
             if (!Reserved.Contains(name) && !request.Headers.Contains(name)) request.Headers.TryAddWithoutValidation(name, value);
@@ -21,7 +21,8 @@ public static class RequestHeadersExtensions
     private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
         { "Host", "Cookie", "Range", "If-Range", "Accept-Encoding", "Content-Length", "Connection", "Transfer-Encoding", "User-Agent", "Referer" };
 
-    private static bool SameHost(string? cookiesFor, Uri? target) =>
-        cookiesFor is null || (Uri.TryCreate(cookiesFor, UriKind.Absolute, out var origin) && target is not null
+    /// <summary>The browser's cookies go only to the host (and port) they were read for.</summary>
+    public static bool CookiesGoTo(this RequestHeaders headers, Uri? target) =>
+        headers.CookiesFor is not { } cookiesFor || (Uri.TryCreate(cookiesFor, UriKind.Absolute, out var origin) && target is not null
             && string.Equals(origin.IdnHost, target.IdnHost, StringComparison.OrdinalIgnoreCase) && origin.Port == target.Port);
 }

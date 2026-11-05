@@ -53,7 +53,7 @@ Version-1 clients still get version-1 replies.
 ## Videos
 
 1. **Tools.** yt-dlp, Deno and FFmpeg live in `tools\` in the data folder. The first video question starts setting them up in the background and answers with the progress; Settings can start it too. Each file comes from the project's latest GitHub release and is checked against the release's SHA-256 list before use; archives are unpacked flat, so no path inside them is trusted. yt-dlp is looked at for a newer release once a day (Update now looks at once). A newer yt-dlp waits beside the old one while any video job uses it, and takes its place when none does.
-2. **Finding the video.** `yt-dlp -J` on the page, with the browser's cookies (written to a cookies file only for that run, then deleted), referrer and user agent. For each height IDM-Rea offers one choice: the best picture (AVC first, then AV1, then VP9) with matching sound (AAC for MP4, Opus for WebM), or one stream holding both, plus "Sound only". A stream yt-dlp can't describe (a bare HLS list) is offered as one "Video" choice. A page yt-dlp doesn't know is tried through the media addresses the browser saw it load, first with yt-dlp, then as plain files.
+2. **Finding the video.** `yt-dlp -J` on the page, with the browser's cookies (for the page's own host only, written to a cookies file only for that run, then deleted; a media address on another host gets none), referrer and user agent. For each height IDM-Rea offers one choice: the best picture (AVC first, then AV1, then VP9) with matching sound (AAC for MP4, Opus for WebM), or one stream holding both, plus "Sound only". A stream yt-dlp can't describe (a bare HLS list) is offered as one "Video" choice. A page yt-dlp doesn't know is tried through the media addresses the browser saw it load, first with yt-dlp, then as plain files.
 3. **Downloading.** The job keeps its page, its choice and one entry per stream. Streams are fetched one after another into their own part files:
    - Direct streams go through the same multi-part transfer as files, never asking for more than the stream's chunk size per request (YouTube slows larger ones).
    - HLS lists are fetched segment by segment, a few ahead, appended in order and checkpointed per segment; AES-128 segments are decrypted with the list's key and IV (or the sequence number). Byte-range segments and an init segment are honoured. Live lists, SAMPLE-AES and other key formats (DRM) are refused.
@@ -63,6 +63,7 @@ Version-1 clients still get version-1 replies.
 ## Browser extension
 
 - `background.js` (service worker): checks links with a `Range: bytes=0-1023` request (4 at a time, cached 10 minutes), takes over browser downloads, guards tabs, and keeps the lists.
+  - **Link checks** carry the browser's cookies only for links on the page's own site, and never reach this PC or the local network (`localhost`, `10.x`, `192.168.x`, link-local and the like) unless the page itself is on that host. A call to IDM-Rea that can't reach it at all is tried once more after 1.5 s, since the host is briefly missing while IDM-Rea is updated.
   - **Take over:** the browser's download is paused, sent to IDM-Rea with the page's cookies, referrer and user agent, and erased only once IDM-Rea accepts it; otherwise it resumes in the browser. Files smaller than the Settings floor (1 MB) and private windows stay in the browser.
   - **New tabs:** a tab opened by a page to another site is closed unless the page reported, in the last 1.5 s, a click on a link to that site or on a button. Ad networks are always closed. The page shows "Blocked a pop-up to example.com" with "Open it".
   - **Redirects:** a tab sent to an ad server without being typed or clicked as a link to it goes back.
@@ -91,7 +92,7 @@ Stored in `%LOCALAPPDATA%\IDMRea`; `IDMREA_DATA_DIRECTORY` overrides it (used by
 | `app-startup.log` | app start-up errors |
 | `tools\` | yt-dlp, Deno and FFmpeg, with yt-dlp's version and when it was last checked |
 | `temp\` | yt-dlp's cookies file, only while it runs |
-| `browser\com.idmrea.host.json` | the native host manifest, written by "Add to browser" |
+| `browser\com.idmrea.host.json` | the native host manifest, written by "Add to browser" (rewritten only when it changes, never half-written) |
 | `browser\extension\` | the copy of the extension the browser loads unpacked; "Add to browser" makes it and each engine start refreshes it from the app, so it outlives an app update or move |
 
 "Add to browser" also points `HKCU\Software\{Google\Chrome, Microsoft\Edge, Chromium}\NativeMessagingHosts\com.idmrea.host` at that manifest, and writes `%LOCALAPPDATA%\IDMRea\browser-target.txt` with the data folder the host should use (the browser starts it without the app's environment; an `IDMREA_DATA_DIRECTORY` in the browser's own environment wins). Cookies sent with a browser download are stored with the job encrypted for the current Windows user (DPAPI).

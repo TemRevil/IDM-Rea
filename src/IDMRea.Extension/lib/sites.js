@@ -39,3 +39,28 @@ export function within(host, domain) {
 }
 
 export const isFileHost = (host) => FILE_HOSTS.some((d) => within(host, d));
+
+/** This PC, the local network, or link-local addresses (router pages, cloud metadata). */
+export function isPrivateHost(host) {
+  host = (host || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  }
+  if (!host.includes(':')) return false;
+  return host === '::' || host === '::1' || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
+}
+
+/**
+ * How a page's link may be checked: never on the local network from a page that isn't on that host, and with the
+ * browser's sign-in cookies only when the link is on the page's own site (so a page can't make IDM-Rea act signed in
+ * somewhere else). Null means: don't check it.
+ */
+export function probePlan(url, pageUrl) {
+  const host = hostOf(url), page = hostOf(pageUrl);
+  if (!host) return null;
+  if (isPrivateHost(host) && host !== page) return null;
+  return { credentials: page && sameSite(host, page) ? 'include' : 'omit' };
+}

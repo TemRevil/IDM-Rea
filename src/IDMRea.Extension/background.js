@@ -1,9 +1,10 @@
 // IDM-Rea's service worker: talks to the app, checks links, takes over downloads, guards tabs, keeps the lists.
 import { LISTS, parse, DomainSet } from './lib/lists.js';
 import { classify } from './lib/verdict.js';
-import { hostOf, siteOf } from './lib/sites.js';
+import { hostOf, siteOf, probePlan } from './lib/sites.js';
 import { newTabVerdict, redirectVerdict } from './lib/guard.js';
 import { isMediaRequest, mediaNotes } from './lib/video.js';
+import { askHost, RETRY_MS } from './lib/host.js';
 
 const HOST = 'com.idmrea.host';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -88,6 +89,10 @@ chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === 'lists' || ala
 
 let nextId = 1;
 function native(message) {
+  return askHost(() => nativeOnce(message), () => new Promise((r) => setTimeout(r, RETRY_MS)));
+}
+
+function nativeOnce(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendNativeMessage(HOST, { id: nextId++, ...message }, (reply) => {
       // Chrome's own reason is kept: "not found" means Add to browser was never pressed; anything else is a real fault.
@@ -172,10 +177,12 @@ async function check({ url, pageUrl, linkText, nearText }) {
   await ready;
   const first = classify({ url, pageUrl, lists });
   if (first.kind === 'blocked' || first.kind === 'ad') return first;
+  const plan = probePlan(url, pageUrl);
+  if (!plan) return { kind: 'unknown', warnings: [] };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { headers: { Range: `bytes=0-${PROBE_BYTES - 1}` }, credentials: 'include', signal: controller.signal });
+    const response = await fetch(url, { headers: { Range: `bytes=0-${PROBE_BYTES - 1}` }, credentials: plan.credentials, signal: controller.signal });
     const firstBytes = await readFirst(response, PROBE_BYTES);
     const h = (name) => response.headers.get(name) || '';
     const verdict = classify({

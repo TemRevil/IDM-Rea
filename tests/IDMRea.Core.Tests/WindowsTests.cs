@@ -76,6 +76,35 @@ public sealed class WindowsTests
     }
 
     [Fact]
+    public void AnEngineStartLeavesAnUnchangedRegistrationAlone()
+    {
+        // The browser reads the manifest and runs the extension from these files: rewriting them on every start, while
+        // the browser is using them, made it report "native messaging host not found" for a moment.
+        const string prefix = @"Software\IDMRea-Tests";
+        var dir = Path.Combine(Path.GetTempPath(), "idmrea-tests-" + Guid.NewGuid());
+        var data = Path.Combine(dir, "data"); var home = Path.Combine(dir, "home");
+        var registration = new BrowserRegistration(prefix);
+        var source = FakeExtension(dir);
+        var copy = Protocol.ExtensionFolderFor(data);
+        var manifest = Path.Combine(data, "browser", "com.idmrea.host.json");
+        var old = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        try
+        {
+            registration.Register(@"C:\Apps\engine\IDMRea.BrowserHost.exe", data, home, source);
+            File.SetLastWriteTimeUtc(manifest, old);
+            Directory.SetCreationTimeUtc(copy, old);
+            File.SetLastWriteTimeUtc(Path.Combine(copy, "manifest.json"), old);
+
+            Assert.True(registration.RefreshIfOwned(@"C:\Apps\engine\IDMRea.BrowserHost.exe", data, home, source));
+            Assert.Equal(old, File.GetLastWriteTimeUtc(manifest));
+            Assert.Equal(old, Directory.GetCreationTimeUtc(copy));
+            Assert.Equal(old, File.GetLastWriteTimeUtc(Path.Combine(copy, "manifest.json")));
+            Assert.Empty(Directory.GetFiles(Path.Combine(data, "browser"), "*.tmp"));
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(prefix, false); Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void AddToBrowserWithoutTheExtensionSaysSoAndRegistersNothing()
     {
         const string prefix = @"Software\IDMRea-Tests";
