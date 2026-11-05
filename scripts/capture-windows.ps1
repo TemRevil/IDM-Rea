@@ -124,6 +124,8 @@ function Select-Nav($app, $name) {
 }
 function Listed($app) {
  $list = Find-Named $app 'Downloads list'
+ # Switching sections rebuilds the list: for a moment there is none, and the caller's Wait-For simply asks again.
+ if (!$list) { return @() }
  $items = $list.FindAll([System.Windows.Automation.TreeScope]::Children,(New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty,[System.Windows.Automation.ControlType]::ListItem)))
  return @($items | ForEach-Object { $_.Current.Name })
 }

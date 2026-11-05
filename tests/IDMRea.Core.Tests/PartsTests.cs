@@ -53,7 +53,7 @@ public sealed class PartsTests
     [Fact]
     public async Task MultiPartExactBytes()
     {
-        await using var server = new Fixture { BodySize = 8 * MiB, Delay = 1, ChunkSize = 32 * 1024 };
+        await using var server = new Fixture { BodySize = 8 * MiB, Delay = 15, ChunkSize = 32 * 1024 };
         var (done, _) = await Download(server);
         Assert.Equal(DownloadStatus.Completed, done.Status);
         Assert.Equal(server.Body, await File.ReadAllBytesAsync(done.Destination));
@@ -72,7 +72,7 @@ public sealed class PartsTests
     public async Task PartFileIsSparseWhileDownloadingAndNotAfter()
     {
         if (!OperatingSystem.IsWindows()) return;
-        await using var server = new Fixture { BodySize = 8 * MiB, Delay = 1, ChunkSize = 32 * 1024 };
+        await using var server = new Fixture { BodySize = 8 * MiB, Delay = 15, ChunkSize = 32 * 1024 };
         var root = Temp(); var data = Path.Combine(root, "data");
         string? partial = null; var sparseSeen = false;
         await using var manager = new DownloadManager(data, new ManagerOptions(WriteFault: _ =>
